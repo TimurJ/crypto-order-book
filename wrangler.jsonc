@@ -1,0 +1,43 @@
+{
+  // Wrangler config for the crypto-order-book SPA on Cloudflare Workers (Static Assets).
+  // Three named environments => three isolated Worker scripts. ALWAYS deploy with `--env <name>`
+  // (the package.json deploy:* scripts and CD workflow do); a bare `wrangler deploy` would target
+  // the top-level config, which we never intend to ship.
+  // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "crypto-order-book",
+  "main": "worker/index.ts",
+  // Set near "today" on a new project so we run current runtime behaviour. The
+  // navigation-prefers-asset-serving behaviour only needs >= 2025-04-01.
+  "compatibility_date": "2026-06-01",
+
+  // Serve the built SPA from ./dist as static assets. The Worker (`main`) is invoked only for
+  // routes that don't match a static file (and for `run_worker_first` routes below).
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Unmatched routes fall back to index.html so client-side routing works.
+    "not_found_handling": "single-page-application",
+    // Guarantee the Worker — not the SPA fallback — handles these dynamic routes regardless of
+    // how the request is classified. `/api/*` slots in here when the backend lands.
+    "run_worker_first": ["/config.js"]
+  },
+
+  // `vars` are non-inheritable, so they're declared per environment. Env-specific config is
+  // exposed to the client at runtime via /config.js (worker/index.ts) and is never baked into
+  // the bundle — that's what lets one built artifact be promoted unchanged across all three envs.
+  "env": {
+    "dev": {
+      "name": "crypto-order-book-dev",
+      "vars": { "APP_ENV": "dev", "API_BASE_URL": "", "WS_URL": "" }
+    },
+    "uat": {
+      "name": "crypto-order-book-uat",
+      "vars": { "APP_ENV": "uat", "API_BASE_URL": "", "WS_URL": "" }
+    },
+    "prod": {
+      "name": "crypto-order-book-prod",
+      "vars": { "APP_ENV": "prod", "API_BASE_URL": "", "WS_URL": "" }
+    }
+  }
+}

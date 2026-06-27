@@ -9,7 +9,8 @@ CSS v4, and shadcn/ui (the `base-lyra` style, which uses **Base UI** primitives 
 and Tabler icons). Package manager is **pnpm**.
 
 > Status: **early scaffold**. The app currently renders the shadcn starter landing page
-> (`src/App.tsx`) with theming wired up. There is no order-book domain code yet.
+> (`src/App.tsx`) with theming wired up. There is no order-book domain code yet. The CI **and**
+> CD pipelines exist (three-env Cloudflare Workers deploy; CD is inert until credentials are set).
 
 ## Commands
 
@@ -22,6 +23,8 @@ and Tabler icons). Package manager is **pnpm**.
 | `pnpm lint` | `biome lint` (read-only) |
 | `pnpm format` | `biome format --write` |
 | `pnpm check` | `biome check --write` (lint + format, applies safe fixes) |
+| `pnpm deploy:dev` / `:uat` / `:prod` | `wrangler deploy --env <name>` to a Cloudflare Workers env |
+| `pnpm cf-typegen` | `wrangler types` — regenerate Worker binding types from `wrangler.jsonc` |
 
 ## Linting & formatting — Biome
 
@@ -95,6 +98,49 @@ Design decisions:
 - **No `test` job yet** — a Vitest job (same setup as `verify`) lands when tests do, matching the
   `pnpm test` TODO in `.husky/pre-push`.
 
+## CD — Cloudflare Workers
+
+CD lives in `.github/workflows/cd.yml` and deploys to **Cloudflare Workers** (Static Assets) across
+three environments. Config is `wrangler.jsonc`: three **named environments** (`[env.dev/uat/prod]`),
+each a separate Worker script (`crypto-order-book-{dev,uat,prod}`). Deploys always pass `--env`.
+The thin Worker `worker/index.ts` serves static assets + per-env `/config.js`; future API/DO/Container
+bindings attach to the env blocks (`run_worker_first: ["/api/*"]`).
+
+Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions upload --env dev`,
+posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
+PROD, gated on the prod GitHub Environment's required reviewer.
+
+Design decisions (the depth an interviewer probes):
+
+- **Build once, promote the same artifact.** The SPA bundle is built **exactly once**, on the
+  `main` merge (`build` job, `if: push && ref == refs/heads/main`), and stored as `dist-<sha>`.
+  UAT/PROD **download that artifact** (cross-run, via a `gh run list --commit <sha> --branch main`
+  lookup that fails loudly on ≠1 match) and deploy the same bytes — they **never rebuild**.
+  `build` must stay main-only: rebuilding on a tag would break the guarantee *and* create a second
+  artifact-producing run per SHA, tripping the resolver's "exactly one" invariant. Only DEV shares
+  a run with `build`; UAT/PROD depend on `classify` alone (not `build`, which is skipped on tags).
+  *Nuance:* only the static asset bundle is promoted byte-for-byte; the thin Worker is re-bundled
+  by wrangler from the same tagged commit (deterministic, trivial).
+- **Runtime config, not build-time.** Vite bakes `VITE_*` at build time, fighting build-once. So
+  env config is served at runtime via `/config.js` (`window.__APP_CONFIG__`) from the Worker's
+  `vars`; never bake env config into the bundle. See Architecture / `src/lib/app-config.ts`.
+- **Tag classification.** `on:` globs can't tell `v1.2.3` from `v1.2.3-rc.1`, so a `classify` job
+  regex-matches `github.ref_name` (`^v\d+\.\d+\.\d+$` → prod, `…-rc\.\d+$` → uat, else → `none`)
+  and deploy jobs gate on its output — a stray/malformed tag deploys nothing.
+- **`pnpm exec wrangler`, not `cloudflare/wrangler-action`.** Same reasoning as `pnpm biome ci`
+  over `biomejs/setup-biome`: the action installs its own wrangler and would drift from the
+  lockfile-pinned devDep.
+- **Per-environment deploy tokens.** Each GitHub Environment holds its own `CLOUDFLARE_API_TOKEN`
+  secret, so the prod token is only exposed to the approval-gated prod job. **Honest caveat:**
+  Cloudflare's `Workers Scripts: Edit` is **account-wide** — a token can't be scoped to one script;
+  the real wins are revocable-per-env creds + approval-gating, not per-resource lockdown.
+- **Inert until configured.** Deploy/preview jobs gate on `vars.CLOUDFLARE_ACCOUNT_ID != ''`, so
+  the workflow no-ops (no red X) until the repo variable + per-env secrets are set. Setup steps:
+  README → Deployment → First-time setup.
+- **Later, not v1:** gradual/canary prod rollout (`wrangler versions deploy <id>@<pct> --yes`),
+  R2-keyed artifacts for longer retention, custom domains, the HTMLRewriter SPA-shell config
+  variant, and a `secrets`/`commits`-style note if those land.
+
 ## Secrets
 
 Never commit secrets / API keys. `.env*` is gitignored (except `.env.example`) — load config from
@@ -102,7 +148,10 @@ environment variables. **secretlint** (pre-commit, configured in `.secretlintrc.
 recommended preset) scans every staged file as a safety net. Remember a browser SPA ships
 everything to the client: exchange keys with trade/withdraw permissions must live behind a backend,
 never in frontend code. **gitleaks** adds a deeper, full-history secret scan in CI (see
-[CI — GitHub Actions](#ci--github-actions)) on top of secretlint's staged-file check.
+[CI — GitHub Actions](#ci--github-actions)) on top of secretlint's staged-file check. Per-env,
+**non-secret** runtime config is served via the Worker's `/config.js` (not the bundle); Worker
+*secrets* (when the backend needs them) go in `.dev.vars` locally (gitignored) and
+`wrangler secret put` in deployed envs — never in `vars` in `wrangler.jsonc`, which are public.
 
 ## Architecture
 
@@ -122,10 +171,20 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   are defined in `@theme inline`; dark mode is wired via `@custom-variant dark (&:is(.dark *))`,
   which keys off the `.dark` class the theme provider toggles.
 - **Path alias:** `@/*` → `src/*` (root `tsconfig.json` `paths` + `vite.config.ts`).
+- **Hosting / Worker:** `worker/index.ts` is a thin Cloudflare Worker (its own runtime, no DOM).
+  It serves the SPA's static assets (`env.ASSETS`) and the per-env `/config.js`. `wrangler.jsonc`
+  defines the three envs (see [CD](#cd--cloudflare-workers)). `vite build` does **not** bundle the
+  Worker — **wrangler** does, at deploy time.
+- **Runtime config:** env-specific values reach the client at runtime via `/config.js`
+  (`window.__APP_CONFIG__`), never `import.meta.env`. The Worker serves it per-env in deployed
+  builds; a Vite plugin (`runtimeConfig` in `vite.config.ts`) both injects the
+  `<script src="/config.js">` into `index.html` (so it's never bundled) and serves it in `pnpm dev`.
+  Read config through `src/lib/app-config.ts` (`getConfig()` / `AppConfig`).
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,
   `erasableSyntaxOnly`, `noUnusedLocals`/`noUnusedParameters`. Build uses project references
-  (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json`). Target es2023,
-  `moduleResolution: "bundler"`.
+  (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json` + `tsconfig.worker.json` — the last
+  type-checks `worker/` with `@cloudflare/workers-types`, isolated from the app's DOM lib). Target
+  es2023, `moduleResolution: "bundler"`.
 
 ## Conventions / gotchas
 
@@ -137,5 +196,14 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   `cva` definitions) with components in the same file — split them into their own module. The
   strict `useComponentExportOnlyModules` rule will flag it.
 - Never point Biome at CSS. Fix lint findings in code rather than suppressing them.
+- **Never put env-specific config in `VITE_*` vars or `public/`.** It would be baked into the
+  bundle (breaking build-once) or, for `public/config.js`, shadow the Worker's `/config.js` route.
+  Env config is runtime-only via `/config.js`; the Worker uses `export default { fetch }` (a
+  Worker requirement — exempt from the component-export rule since it's not a component).
+- **Native build scripts are allow-listed in `pnpm-workspace.yaml` (`allowBuilds`).** pnpm 11
+  blocks unapproved build scripts *and fails `pnpm <script>`* until each is resolved to `true`/
+  `false` (never leave the `set this to true or false` placeholder). Current calls: `workerd: true`
+  (Cloudflare runtime for local `wrangler dev`), `sharp: false` (transitive via miniflare for image
+  emulation we don't use).
 - **Keep docs in sync:** on any **major change** (tooling, architecture, a new subsystem,
   scripts/hooks), update **both `README.md` and `CLAUDE.md`** in the same change.

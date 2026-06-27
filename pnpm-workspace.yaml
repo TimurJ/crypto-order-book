@@ -3,3 +3,8 @@ packages: []
 allowBuilds:
   esbuild: true
   msw: false
+  # Cloudflare's Workers runtime, used by `wrangler dev` for local simulation.
+  workerd: true
+  # Pulled transitively by miniflare for image-resizing emulation we don't use; skip the
+  # heavy native build. Flip to true if a Worker ever needs the Images binding locally.
+  sharp: false
