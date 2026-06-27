@@ -12,6 +12,10 @@
     "check": "biome check --write",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:uat": "wrangler deploy --env uat",
+    "deploy:prod": "wrangler deploy --env prod",
+    "cf-typegen": "wrangler types",
     "prepare": "husky"
   },
   "dependencies": {
@@ -30,6 +34,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.1",
+    "@cloudflare/workers-types": "^4.20260626.1",
     "@commitlint/cli": "^21.1.0",
     "@commitlint/config-conventional": "^21.1.0",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.2",
@@ -41,13 +46,16 @@
     "lint-staged": "^17.0.8",
     "secretlint": "^13.0.2",
     "typescript": "~6.0.3",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "wrangler": "^4.105.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": "biome check --write --no-errors-on-unmatched",
     "*": "secretlint --no-glob"
   },
   "commitlint": {
-    "extends": ["@commitlint/config-conventional"]
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
   }
 }

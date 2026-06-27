@@ -17,6 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
+# Wrangler / Cloudflare (local secrets + local state)
+.dev.vars
+.dev.vars.*
+.wrangler
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

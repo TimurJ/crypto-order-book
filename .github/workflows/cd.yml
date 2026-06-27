@@ -1,0 +1,260 @@
+name: CD
+
+# Continuous delivery to Cloudflare Workers across three environments.
+#   PR              -> ephemeral preview Worker URL (a non-promoted version of the dev script)
+#   push to main    -> build the artifact ONCE (keyed by SHA) + deploy DEV
+#   tag vX.Y.Z-rc.N -> deploy UAT   (promotes the pre-built artifact for that SHA)
+#   tag vX.Y.Z      -> deploy PROD  (same artifact; gated on the prod Environment's reviewer)
+#
+# Build-once-promote: the SPA bundle is built exactly once on the main merge and stored as the
+# artifact dist-<sha>. UAT/PROD never rebuild it — they download that artifact and ship the same
+# bytes. (The thin Worker in worker/ is re-bundled by wrangler from the same tagged commit; only
+# the static asset bundle is promoted byte-for-byte, which is what acceptance testing signs off.)
+#
+# Deploys run `pnpm exec wrangler` (the lockfile-pinned devDep), not cloudflare/wrangler-action,
+# to avoid version drift — mirroring the repo's `pnpm biome ci` choice over biomejs/setup-biome.
+#
+# Until the Cloudflare credentials exist (see README "Deployment"), the deploy/preview jobs are
+# skipped via the `vars.CLOUDFLARE_ACCOUNT_ID != ''` guard, so this workflow is inert (no red X
+# on PRs). It activates automatically once the repo variable + environment secrets are set.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+# Least privilege by default; jobs widen only where they must.
+permissions:
+  contents: read
+
+jobs:
+  # Classify a pushed tag into a deploy channel. Tight regexes so a stray tag (e.g. v1.2 or
+  # v1.2.3-beta) is `none` and deploys nothing — the trigger glob `v*` can't make this distinction.
+  classify:
+    name: Classify tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.classify.outputs.channel }}
+    steps:
+      - id: classify
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          CHANNEL=none
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            CHANNEL=prod
+          elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            CHANNEL=uat
+          fi
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "Tag '$TAG' classified as: $CHANNEL"
+
+  # Build the SPA bundle ONCE, on the main merge: the single source of bytes for every env.
+  # Must NOT run on tags — a tag points at a commit main already built, so rebuilding would break
+  # build-once and create a second artifact-producing run per SHA (the resolver expects exactly 1).
+  build:
+    name: Build artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # reads pnpm version from packageManager field
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build # tsc -b && vite build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          retention-days: 90
+          if-no-files-found: error
+
+  # PR preview: upload a non-promoted version of the dev Worker and comment its URL on the PR.
+  # Reuses the dev token (so it needs `environment: dev`). Skipped for fork PRs (no secrets).
+  preview:
+    name: PR preview
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the comment step needs write
+    environment: dev
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Upload preview version
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm exec wrangler versions upload --env dev 2>&1 | tee upload.log
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' upload.log | head -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Comment preview URL
+        if: steps.upload.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.upload.outputs.url }}
+        with:
+          script: |
+            const url = process.env.PREVIEW_URL
+            const marker = "<!-- cd-preview-url -->"
+            const body = `${marker}\n🚀 **Preview:** ${url}\n\n_Refreshed on every push to this PR._`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })
+            const existing = comments.find((c) => c.body.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body })
+            }
+
+  # DEV: deploy the same-run artifact on every main merge. Like UAT/PROD it ships the stored
+  # artifact (not a fresh build) so all three envs exercise the identical promotion path.
+  deploy-dev:
+    name: Deploy DEV
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: true # the latest main wins
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Download built artifact (same run)
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env dev
+
+  # UAT: triggered by an rc tag. Promotes the artifact the main build produced for this SHA.
+  deploy-uat:
+    name: Deploy UAT
+    needs: classify
+    if: needs.classify.outputs.channel == 'uat' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # look up + download the cross-run build artifact
+    environment:
+      name: uat
+      url: https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
+    concurrency:
+      group: deploy-uat
+      cancel-in-progress: false # don't interrupt a release deploy
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve the main build run for this commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUNS=$(gh run list --workflow cd.yml --commit "$GITHUB_SHA" --branch main --limit 100 \
+            --json databaseId,conclusion,status \
+            --jq '[.[] | select(.status=="completed" and .conclusion=="success") | .databaseId]')
+          COUNT=$(echo "$RUNS" | jq 'length')
+          if [[ "$COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly 1 successful main build run for $GITHUB_SHA, found $COUNT. Only tag a commit that landed on main and finished its CD build (the artifact may also have aged out past retention)."
+            exit 1
+          fi
+          echo "run_id=$(echo "$RUNS" | jq -r '.[0]')" >> "$GITHUB_OUTPUT"
+      - name: Download the pre-built artifact (build-once)
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          run-id: ${{ steps.resolve.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env uat
+
+  # PROD: triggered by a release tag. Same cross-run artifact; gated on the prod Environment's
+  # required reviewer. A plain `wrangler deploy` still records a Worker version, so rollback is
+  # available; gradual/canary rollout is a documented later step.
+  deploy-prod:
+    name: Deploy PROD
+    needs: classify
+    if: needs.classify.outputs.channel == 'prod' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    environment:
+      name: prod
+      url: https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve the main build run for this commit
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUNS=$(gh run list --workflow cd.yml --commit "$GITHUB_SHA" --branch main --limit 100 \
+            --json databaseId,conclusion,status \
+            --jq '[.[] | select(.status=="completed" and .conclusion=="success") | .databaseId]')
+          COUNT=$(echo "$RUNS" | jq 'length')
+          if [[ "$COUNT" -ne 1 ]]; then
+            echo "::error::Expected exactly 1 successful main build run for $GITHUB_SHA, found $COUNT. Only tag a commit that landed on main and finished its CD build (the artifact may also have aged out past retention)."
+            exit 1
+          fi
+          echo "run_id=$(echo "$RUNS" | jq -r '.[0]')" >> "$GITHUB_OUTPUT"
+      - name: Download the pre-built artifact (build-once)
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          run-id: ${{ steps.resolve.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm exec wrangler deploy --env prod
