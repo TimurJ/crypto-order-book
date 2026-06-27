@@ -57,6 +57,21 @@ Git hooks run locally via **[Husky](https://typicode.github.io/husky)** and inst
 Bypass for a single command with `--no-verify` (e.g. `git commit --no-verify`), or skip hook
 installation entirely with `HUSKY=0`.
 
+## Continuous integration
+
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gates on every
+pull request and on push to `main`. CI is the authoritative check — it mirrors the local hooks on the
+server, so nothing broken lands even if a hook was bypassed or skipped. Three jobs:
+
+- **Lint, typecheck & build** — `biome ci` (read-only lint + format) then `pnpm build`
+  (`tsc -b && vite build`).
+- **Secret scan** — [gitleaks](https://github.com/gitleaks/gitleaks-action) over the full git history.
+- **Commit messages** — [commitlint](#commit-messages) on the PR's commits (backstop to the local
+  `commit-msg` hook).
+
+Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
+`package.json`, so local, hooks, and CI all run the same versions.
+
 ## Commit messages
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org) — the `commit-msg`
