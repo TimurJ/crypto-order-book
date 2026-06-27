@@ -3,7 +3,9 @@
 A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and shadcn/ui.
 
 > **Status: early scaffold.** The app shell and theming are in place (the starter landing
-> page with light/dark mode). Order-book functionality is not implemented yet.
+> page with light/dark mode). Order-book functionality is not implemented yet — but the full
+> CI **and** CD pipeline is live: every push deploys across DEV/UAT/PROD on Cloudflare Workers
+> (see [Deployment](#deployment-cloudflare-workers)).
 
 ## Tech stack
 
@@ -75,6 +77,10 @@ server, so nothing broken lands even if a hook was bypassed or skipped. Three jo
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
 `package.json`, so local, hooks, and CI all run the same versions.
 
+`main` is **branch-protected**: changes land via PR, and all three checks must pass (with the branch
+up to date) before merging — enforced on admins too. The CD checks are intentionally *not* required
+(they skip on PRs or depend on Cloudflare).
+
 ## Deployment (Cloudflare Workers)
 
 The app deploys to **Cloudflare Workers** with
@@ -86,6 +92,9 @@ environments — **DEV**, **UAT**, **PROD** — driven by
 the SPA's static assets plus the per-environment runtime config, and is where API routes and
 Durable Object / Container bindings will attach later.
 
+For the full step-by-step setup history, the decisions, and the gotchas, see
+[`docs/cd-setup.md`](docs/cd-setup.md).
+
 ### Release flow
 
 | Trigger | Environment | Notes |
@@ -95,69 +104,54 @@ Durable Object / Container bindings will attach later.
 | Tag `vX.Y.Z-rc.N` | **UAT** | Release candidate |
 | Tag `vX.Y.Z` | **PROD** | Blocked on the prod Environment's required-reviewer approval |
 
-### Build once, promote the same artifact
+### Releasing — deploy to UAT / PROD
 
-The production bundle is built **exactly once**, on the merge to `main`, and stored as a GitHub
-Actions artifact keyed by commit SHA (`dist-<sha>`). UAT and PROD **download that artifact and
-deploy the same bytes** — they never rebuild — so PROD ships precisely what UAT signed off on.
-(The thin Worker is re-bundled by wrangler from the same tagged commit; only the static asset
-bundle — what acceptance testing actually exercises — is promoted byte-for-byte.) Tagging a commit
-that never landed on `main`, or whose artifact has aged out past the 90-day retention, fails the
-deploy loudly rather than silently rebuilding.
+Day-to-day, after work has landed on `main`:
 
-### Runtime config — not build-time
+```bash
+# DEV deploys automatically on merge to main — nothing to do.
 
-Vite bakes `import.meta.env` / `VITE_*` values into the bundle at **build** time, which fights
-build-once. Instead, **environment-specific config is served at runtime**: the Worker serves
-`/config.js`, setting `window.__APP_CONFIG__` from the environment's `vars` (see `wrangler.jsonc`);
-`pnpm dev` serves the same endpoint via a Vite middleware. Read it through
-[`src/lib/app-config.ts`](src/lib/app-config.ts) — **never** put environment config in `VITE_*`
-vars or in `public/` (a `public/config.js` would shadow the Worker route). This is what lets one
-built artifact run unchanged in every environment.
+# UAT — tag the (already-merged) commit with a release candidate:
+git tag v0.1.0-rc.1
+git push origin v0.1.0-rc.1
 
-### Scoped deploy tokens
+# PROD — once UAT looks good, tag the same commit with the release version:
+git tag v0.1.0
+git push origin v0.1.0
+```
 
-Each GitHub Environment holds its **own** Cloudflare API token (a `CLOUDFLARE_API_TOKEN`
-*environment* secret), so the prod token is only ever exposed to the approval-gated prod job and
-each can be revoked independently.
+The PROD run then **pauses for approval**: go to **Actions → the running deploy → “Review
+deployments” → check `prod` → Approve and deploy**. It promotes the same artifact UAT ran.
 
-> **Caveat (be precise about this):** Cloudflare's `Workers Scripts: Edit` permission is
-> **account-wide** — a standard API token can't be locked to only the `crypto-order-book-prod`
-> script. The real blast-radius wins are (a) independently revocable credentials per env and
-> (b) gating the prod token behind the prod Environment's approval. True per-resource isolation
-> would require separate Cloudflare accounts per env (overkill here).
+> **Ordering rule:** only tag a commit that has **landed on `main` and finished its `build`** — that
+> run is what produced the `dist-<sha>` artifact the tag deploys promote. Tagging anything else fails
+> the deploy loudly (by design) rather than silently rebuilding. A malformed tag (e.g. `v1.2`,
+> `v1.2.3-beta`) classifies as `none` and deploys nothing.
 
-### First-time setup
+**Rollback:** every deploy records a Worker version — roll back per env with `wrangler rollback`, or
+re-tag/redeploy a previous good commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
 
-The pipeline is **inert until configured** — the deploy jobs skip while `CLOUDFLARE_ACCOUNT_ID` is
-unset, so CI stays green until you opt in. To activate it:
+### How it works (in brief)
 
-1. **Cloudflare** — note your **Account ID** (dashboard → Workers & Pages) and your `*.workers.dev`
-   **subdomain** (the label before `.workers.dev`).
-2. **Three API tokens** — dashboard → My Profile → API Tokens → *Create Token* →
-   **"Edit Cloudflare Workers"** template. One each for dev / uat / prod.
-3. **GitHub variables, environments & secrets** (run from the repo, with the `gh` CLI):
+- **Build once, promote the same bytes** — the bundle is built once on the merge to `main`
+  (artifact `dist-<sha>`); UAT/PROD download and deploy *that* artifact, never rebuilding, so PROD
+  ships exactly what UAT signed off on.
+- **Runtime config, not build-time** — env values are served by the Worker at `/config.js`
+  (`window.__APP_CONFIG__`), read via [`src/lib/app-config.ts`](src/lib/app-config.ts); **never**
+  put env config in `VITE_*` vars or `public/`.
+- **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
+  `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job.
 
-   ```bash
-   # Repo variables (not secret) — also the on-switch for the deploy jobs
-   gh variable set CLOUDFLARE_ACCOUNT_ID --body "<account-id>"
-   gh variable set WORKERS_SUBDOMAIN     --body "<your-subdomain>"
+Full detail — the decisions, the account-wide-token caveat, and the gotchas — is in
+[`docs/cd-setup.md`](docs/cd-setup.md).
 
-   # Environments (prod gets you as a required reviewer)
-   gh api -X PUT repos/{owner}/{repo}/environments/dev
-   gh api -X PUT repos/{owner}/{repo}/environments/uat
-   gh api -X PUT repos/{owner}/{repo}/environments/prod --input - <<EOF
-   {"reviewers":[{"type":"User","id":$(gh api user --jq .id)}]}
-   EOF
+### Setup
 
-   # Per-environment deploy tokens (paste each token when prompted)
-   gh secret set CLOUDFLARE_API_TOKEN --env dev
-   gh secret set CLOUDFLARE_API_TOKEN --env uat
-   gh secret set CLOUDFLARE_API_TOKEN --env prod
-   ```
-
-Local deploys use `pnpm deploy:dev` / `:uat` / `:prod`; `wrangler dev` runs the Worker + SPA
-locally (it needs the `workerd` build — see the `allowBuilds` block in `pnpm-workspace.yaml`).
+The pipeline is already configured and live. For the step-by-step setup — Cloudflare account,
+tokens, and the `gh` commands for variables / environments / secrets — or to recreate it elsewhere,
+see the **Manual setup** section of [`docs/cd-setup.md`](docs/cd-setup.md). Local deploys use
+`pnpm deploy:dev` / `:uat` / `:prod`; `wrangler dev` runs the Worker + SPA locally (it needs the
+`workerd` build — see the `allowBuilds` block in `pnpm-workspace.yaml`).
 
 ## Commit messages
 

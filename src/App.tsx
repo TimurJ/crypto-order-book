@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button"
+import { getConfig } from "@/lib/app-config.ts"
 
 export function App() {
+  const { env } = getConfig()
   return (
     <div className="flex min-h-svh p-6">
       <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
@@ -11,7 +13,11 @@ export function App() {
           <Button className="mt-2">Button</Button>
         </div>
         <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
+          env:{" "}
+          <span className="rounded bg-muted px-1.5 py-0.5 text-foreground">
+            {env}
+          </span>{" "}
+          · (Press <kbd>d</kbd> to toggle dark mode)
         </div>
       </div>
     </div>

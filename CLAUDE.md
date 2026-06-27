@@ -10,7 +10,8 @@ and Tabler icons). Package manager is **pnpm**.
 
 > Status: **early scaffold**. The app currently renders the shadcn starter landing page
 > (`src/App.tsx`) with theming wired up. There is no order-book domain code yet. The CI **and**
-> CD pipelines exist (three-env Cloudflare Workers deploy; CD is inert until credentials are set).
+> CD pipelines are **live** — three-env Cloudflare Workers deploy (DEV/UAT/PROD), build-once-promote
+> verified. `main` is branch-protected.
 
 ## Commands
 
@@ -110,36 +111,22 @@ Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions up
 posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
 PROD, gated on the prod GitHub Environment's required reviewer.
 
-Design decisions (the depth an interviewer probes):
+Invariants to preserve when editing the pipeline:
 
-- **Build once, promote the same artifact.** The SPA bundle is built **exactly once**, on the
-  `main` merge (`build` job, `if: push && ref == refs/heads/main`), and stored as `dist-<sha>`.
-  UAT/PROD **download that artifact** (cross-run, via a `gh run list --commit <sha> --branch main`
-  lookup that fails loudly on ≠1 match) and deploy the same bytes — they **never rebuild**.
-  `build` must stay main-only: rebuilding on a tag would break the guarantee *and* create a second
-  artifact-producing run per SHA, tripping the resolver's "exactly one" invariant. Only DEV shares
-  a run with `build`; UAT/PROD depend on `classify` alone (not `build`, which is skipped on tags).
-  *Nuance:* only the static asset bundle is promoted byte-for-byte; the thin Worker is re-bundled
-  by wrangler from the same tagged commit (deterministic, trivial).
-- **Runtime config, not build-time.** Vite bakes `VITE_*` at build time, fighting build-once. So
-  env config is served at runtime via `/config.js` (`window.__APP_CONFIG__`) from the Worker's
-  `vars`; never bake env config into the bundle. See Architecture / `src/lib/app-config.ts`.
-- **Tag classification.** `on:` globs can't tell `v1.2.3` from `v1.2.3-rc.1`, so a `classify` job
-  regex-matches `github.ref_name` (`^v\d+\.\d+\.\d+$` → prod, `…-rc\.\d+$` → uat, else → `none`)
-  and deploy jobs gate on its output — a stray/malformed tag deploys nothing.
-- **`pnpm exec wrangler`, not `cloudflare/wrangler-action`.** Same reasoning as `pnpm biome ci`
-  over `biomejs/setup-biome`: the action installs its own wrangler and would drift from the
-  lockfile-pinned devDep.
-- **Per-environment deploy tokens.** Each GitHub Environment holds its own `CLOUDFLARE_API_TOKEN`
-  secret, so the prod token is only exposed to the approval-gated prod job. **Honest caveat:**
-  Cloudflare's `Workers Scripts: Edit` is **account-wide** — a token can't be scoped to one script;
-  the real wins are revocable-per-env creds + approval-gating, not per-resource lockdown.
-- **Inert until configured.** Deploy/preview jobs gate on `vars.CLOUDFLARE_ACCOUNT_ID != ''`, so
-  the workflow no-ops (no red X) until the repo variable + per-env secrets are set. Setup steps:
-  README → Deployment → First-time setup.
-- **Later, not v1:** gradual/canary prod rollout (`wrangler versions deploy <id>@<pct> --yes`),
-  R2-keyed artifacts for longer retention, custom domains, the HTMLRewriter SPA-shell config
-  variant, and a `secrets`/`commits`-style note if those land.
+- `build` is **main-only**; UAT/PROD download the `dist-<sha>` artifact and **never rebuild** — do
+  not add a tag trigger to `build` (it would break build-once *and* create a second artifact-producing
+  run per SHA, tripping the cross-run resolver's "exactly one run" invariant). Only DEV shares a run
+  with `build`; UAT/PROD depend on `classify` alone.
+- env config is runtime via `/config.js`, **never `VITE_*`** (see Architecture / `src/lib/app-config.ts`).
+- tag classification: `vX.Y.Z` → prod, `…-rc.N` → uat, else `none` (deploys nothing).
+- per-env `CLOUDFLARE_API_TOKEN` secrets; CF `Workers Scripts:Edit` is account-wide (so the win is
+  revocable-per-env creds + prod-gating, not per-script lockdown).
+
+**Live & protected:** configured and live on `*.timurjalilov1.workers.dev`; `main` is Strict
+branch-protected (PR + the 3 CI checks, enforced on admins; CD checks not required).
+
+**Full rationale, gotchas, deferred items, and setup steps:** [`docs/cd-setup.md`](docs/cd-setup.md)
+(keep it updated when the setup itself changes).
 
 ## Secrets
 
