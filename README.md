@@ -39,8 +39,48 @@ Then open the URL Vite prints (default http://localhost:5173).
 ## Tooling
 
 Linting and formatting are handled by a single tool, **[Biome](https://biomejs.dev)**, which
-replaced ESLint + Prettier. Configuration is in `biome.json`. See [`CLAUDE.md`](./CLAUDE.md)
-for project conventions and the rationale behind the setup.
+replaced ESLint + Prettier. Configuration is in `biome.json`. Quality is enforced locally by
+[git hooks](#git-hooks). See [`CLAUDE.md`](./CLAUDE.md) for project conventions and the rationale
+behind the setup.
+
+## Git hooks
+
+Git hooks run locally via **[Husky](https://typicode.github.io/husky)** and install themselves on
+`pnpm install` (the `prepare` script):
+
+- **pre-commit** — runs Biome (lint + format) and
+  [secretlint](https://github.com/secretlint/secretlint) on staged files, auto-fixing and
+  re-staging where safe.
+- **commit-msg** — enforces [Conventional Commits](#commit-messages) (commitlint).
+- **pre-push** — runs `pnpm build`, so type/bundle errors are caught before you push.
+
+Bypass for a single command with `--no-verify` (e.g. `git commit --no-verify`), or skip hook
+installation entirely with `HUSKY=0`.
+
+## Commit messages
+
+Commits must follow [Conventional Commits](https://www.conventionalcommits.org) — the `commit-msg`
+hook rejects anything else:
+
+```
+type(optional-scope): summary
+```
+
+Allowed types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`,
+`style`, `revert`. Examples:
+
+```
+feat(orderbook): render bid/ask depth chart
+fix: correct websocket reconnect backoff
+chore(hooks): add commitlint and secretlint
+```
+
+## Secrets
+
+Never commit secrets or API keys. `.env*` files are gitignored (except `.env.example`) — load
+config from environment variables. secretlint scans every staged file as a safety net. Remember a
+browser app ships everything to the client: exchange keys with trade/withdraw permissions must live
+behind a backend, never in frontend code.
 
 ## Adding components
 
