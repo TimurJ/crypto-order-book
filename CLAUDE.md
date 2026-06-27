@@ -41,6 +41,37 @@ formatting. It replaced ESLint + Prettier. Config lives in `biome.json`.
 - **Convention: fix lint findings in code. Do not add `biome-ignore` / `eslint-disable`**
   unless genuinely unavoidable — exhaust refactors first.
 
+## Git hooks — Husky
+
+Three local git hooks, managed by **Husky 9** (self-installing via `"prepare": "husky"`, which
+runs on every `pnpm install`). Husky sets `core.hooksPath` to `.husky/_/` (auto-generated,
+gitignored via its own `.husky/_/.gitignore`); the tracked hook files are `.husky/pre-commit`,
+`.husky/commit-msg`, and `.husky/pre-push`. The layering is deliberate — fast checks at commit,
+the whole-project build at push:
+
+- **`pre-commit` → `pnpm exec lint-staged`.** The `lint-staged` block in `package.json` runs two
+  tasks on staged files: `biome check --write --no-errors-on-unmatched` on `*.{ts,tsx}` (lint +
+  format, **re-staging** safe fixes), and `secretlint --no-glob` on `*` (every staged file — see
+  Secrets). lint-staged stashes unstaged work, runs the tasks, then restores. The Biome glob
+  mirrors `files.includes` (ts/tsx only). **Only errors block** — `biome check` exits 0 on
+  warnings (e.g. unused vars), matching `pnpm check`; those are left to `pnpm build`/CI.
+- **`commit-msg` → `pnpm exec commitlint --edit "$1"`.** Enforces **Conventional Commits**
+  (`@commitlint/config-conventional`; config is the `commitlint` block in `package.json`). Subjects
+  must be `type(scope): summary` — `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, etc.
+- **`pre-push` → `pnpm build`.** Runs the *real* build (`tsc -b && vite build`) before a push, so
+  type/bundle breakage is caught locally rather than in CI. (`pnpm test` joins here once vitest lands.)
+- **Skipping:** `HUSKY=0` skips hook install (Docker/CI); `git commit --no-verify` /
+  `git push --no-verify` bypass for a single run. For GUI/IDE commits that don't load your Node
+  version manager, put its init in `~/.config/husky/init.sh`.
+
+## Secrets
+
+Never commit secrets / API keys. `.env*` is gitignored (except `.env.example`) — load config from
+environment variables. **secretlint** (pre-commit, configured in `.secretlintrc.json` with the
+recommended preset) scans every staged file as a safety net. Remember a browser SPA ships
+everything to the client: exchange keys with trade/withdraw permissions must live behind a backend,
+never in frontend code. A heavier **gitleaks** scan + CI enforcement arrive in the dedicated CI PR.
+
 ## Architecture
 
 - **Entry:** `index.html` (`#root`) → `src/main.tsx`, which guards the root element (no `!`
@@ -74,3 +105,5 @@ formatting. It replaced ESLint + Prettier. Config lives in `biome.json`.
   `cva` definitions) with components in the same file — split them into their own module. The
   strict `useComponentExportOnlyModules` rule will flag it.
 - Never point Biome at CSS. Fix lint findings in code rather than suppressing them.
+- **Keep docs in sync:** on any **major change** (tooling, architecture, a new subsystem,
+  scripts/hooks), update **both `README.md` and `CLAUDE.md`** in the same change.
