@@ -64,13 +64,45 @@ the whole-project build at push:
   `git push --no-verify` bypass for a single run. For GUI/IDE commits that don't load your Node
   version manager, put its init in `~/.config/husky/init.sh`.
 
+## CI — GitHub Actions
+
+CI lives in `.github/workflows/ci.yml` and runs on **pull requests** and **pushes to `main`**. It is
+the *authoritative* gate — it re-runs the local hooks' checks on the server, so bypassed/skipped hooks
+(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Three parallel
+jobs, each a distinct PR check (clean targets for branch protection):
+
+- **`verify`** — the only job that installs deps: `pnpm install --frozen-lockfile`, then `pnpm biome ci`
+  (read-only lint + format, emits GitHub annotations) and `pnpm build` (`tsc -b && vite build` —
+  typecheck + bundle). Mirrors the pre-commit Biome and pre-push build hooks.
+- **`secrets`** — `gitleaks/gitleaks-action@v3` with `fetch-depth: 0` (full-history scan), a deep
+  backstop to the staged-file secretlint hook. Free for personal accounts; under a GitHub **org** it
+  needs a free `GITLEAKS_LICENSE` secret.
+- **`commits`** — `wagoid/commitlint-github-action@v6`, PR-only; reads the same `commitlint` config
+  from `package.json`. Backstop to the local `commit-msg` hook (catches `--no-verify` / web-UI commits).
+
+Design decisions:
+
+- **Biome runs via the pinned devDependency (`pnpm biome ci`), not `biomejs/setup-biome`.** Biome is
+  pinned exact (2.5.1); using the project's own copy guarantees CI and local lint identically — the
+  setup-biome action with `version: latest` would risk drift.
+- **Single source of truth for versions.** Node via `.nvmrc` (`24`), consumed by setup-node's
+  `node-version-file` and by `nvm use`; pnpm via `package.json`'s `packageManager` field
+  (`pnpm@11.9.0`), auto-detected by `pnpm/action-setup@v6` so the workflow hardcodes no pnpm version.
+- **Action order matters:** `pnpm/action-setup` runs **before** `actions/setup-node`, because
+  setup-node's `cache: pnpm` needs the pnpm binary to resolve the store path.
+- **Hygiene:** least-privilege `permissions: contents: read` (the `commits` job adds `pull-requests:
+  read`); a `concurrency` group cancels superseded runs on a branch; actions are pinned to major tags.
+- **No `test` job yet** — a Vitest job (same setup as `verify`) lands when tests do, matching the
+  `pnpm test` TODO in `.husky/pre-push`.
+
 ## Secrets
 
 Never commit secrets / API keys. `.env*` is gitignored (except `.env.example`) — load config from
 environment variables. **secretlint** (pre-commit, configured in `.secretlintrc.json` with the
 recommended preset) scans every staged file as a safety net. Remember a browser SPA ships
 everything to the client: exchange keys with trade/withdraw permissions must live behind a backend,
-never in frontend code. A heavier **gitleaks** scan + CI enforcement arrive in the dedicated CI PR.
+never in frontend code. **gitleaks** adds a deeper, full-history secret scan in CI (see
+[CI — GitHub Actions](#ci--github-actions)) on top of secretlint's staged-file check.
 
 ## Architecture
 
