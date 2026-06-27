@@ -1,7 +1,7 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
+import { ThemeProviderContext, type Theme } from "./theme-context.ts"
+
 type ResolvedTheme = "dark" | "light"
 
 type ThemeProviderProps = {
@@ -11,17 +11,8 @@ type ThemeProviderProps = {
   disableTransitionOnChange?: boolean
 }
 
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
-
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
-
-const ThemeProviderContext = React.createContext<
-  ThemeProviderState | undefined
->(undefined)
 
 function isTheme(value: string | null): value is Theme {
   if (value === null) {
@@ -217,14 +208,4 @@ export function ThemeProvider({
       {children}
     </ThemeProviderContext.Provider>
   )
-}
-
-export const useTheme = () => {
-  const context = React.useContext(ThemeProviderContext)
-
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider")
-  }
-
-  return context
 }
