@@ -78,7 +78,7 @@ second reviewer twice (which caught two real bugs — see §4).
 
 | Job | Trigger | What it does |
 |---|---|---|
-| `classify` | tag push | regex the tag → `channel` = `prod` (`vX.Y.Z`) / `uat` (`…-rc.N`) / `none` |
+| `classify` | tag push | regex the tag → `channel` (`prod` `vX.Y.Z` / `uat` `…-rc.N` / `none`), and **reject a non-increasing version** vs the latest release tag |
 | `build` | **push to `main` only** | `pnpm build` → upload artifact `dist-<sha>` (90-day retention) |
 | `preview` | PR (same-repo) | `wrangler versions upload --env dev` → comment the preview URL |
 | `deploy-dev` | push to `main` | download same-run artifact → `wrangler deploy --env dev` |

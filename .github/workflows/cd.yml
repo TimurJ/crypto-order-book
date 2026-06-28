@@ -50,6 +50,33 @@ jobs:
           fi
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "Tag '$TAG' classified as: $CHANNEL"
+      # Reject a deploy tag whose version core isn't strictly greater than the latest release
+      # (catches a miscounted / lower / duplicate number before any deploy). Server-side, so it
+      # can't be bypassed. Git already blocks identical tags; PROD's reviewer is the final backstop.
+      - name: Enforce monotonic version
+        if: steps.classify.outputs.channel != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          new_core=$(echo "$TAG" | sed -E 's/^v//; s/-rc\.[0-9]+$//')
+          # gh failure must fail loudly (kept separate from the filter, which may legitimately be empty)
+          tags=$(gh api "repos/${{ github.repository }}/tags" --paginate --jq '.[].name')
+          # highest existing RELEASE core (vX.Y.Z, no -rc), excluding this tag; empty on first release
+          baseline=$(echo "$tags" \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -vxF "$TAG" \
+            | sed -E 's/^v//' \
+            | sort -V | tail -1 || true)
+          if [ -z "$baseline" ]; then
+            echo "No prior release to compare against — '$TAG' accepted."; exit 0
+          fi
+          highest=$(printf '%s\n%s\n' "$new_core" "$baseline" | sort -V | tail -1)
+          if [ "$new_core" = "$baseline" ] || [ "$highest" != "$new_core" ]; then
+            echo "::error::Tag '$TAG' (core $new_core) is not greater than the latest release v$baseline. Bump to a higher version and re-tag."
+            exit 1
+          fi
+          echo "OK: $new_core > $baseline (latest release)"
 
   # Build the SPA bundle ONCE, on the main merge: the single source of bytes for every env.
   # Must NOT run on tags — a tag points at a commit main already built, so rebuilding would break

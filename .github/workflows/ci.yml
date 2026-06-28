@@ -31,6 +31,20 @@ jobs:
       - name: Typecheck & build
         run: pnpm build # tsc -b && vite build
 
+  test:
+    name: Test (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # reads pnpm version from packageManager field
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run tests
+        run: pnpm test:run # vitest run (one-shot; CI is auto-detected too)
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

@@ -1,2 +1,2 @@
 pnpm build
-# TODO: add `pnpm test` (vitest run) here once tests are set up
+pnpm test:run

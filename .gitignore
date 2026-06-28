@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Test coverage output (vitest --coverage)
+coverage
+
 # Env / secrets
 .env
 .env.*

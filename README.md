@@ -15,6 +15,7 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
 - **shadcn/ui** (`base-lyra` style — built on [Base UI](https://base-ui.com) primitives) with
   **Tabler** icons
 - **Biome** for linting & formatting
+- **Vitest** + **React Testing Library** (jsdom) for unit / component tests
 - **pnpm** for package management
 - **Cloudflare Workers** (Static Assets) + **Wrangler** for hosting and deploys
 
@@ -34,6 +35,10 @@ Then open the URL Vite prints (default http://localhost:5173).
 | `pnpm dev` | Start the Vite dev server |
 | `pnpm build` | Type-check (`tsc -b`) and build for production |
 | `pnpm preview` | Serve the production build locally |
+| `pnpm test` | Run tests in watch mode (`vitest`) |
+| `pnpm test:run` | Run tests once (`vitest run`) — used by CI + pre-push |
+| `pnpm test:ui` | Open the Vitest UI dashboard (`vitest --ui`) |
+| `pnpm test:coverage` | Run tests with a coverage report (`vitest run --coverage`) |
 | `pnpm typecheck` | Type-check without emitting (`tsc --noEmit`) |
 | `pnpm lint` | Lint with Biome |
 | `pnpm format` | Format with Biome (`--write`) |
@@ -48,6 +53,21 @@ replaced ESLint + Prettier. Configuration is in `biome.json`. Quality is enforce
 [git hooks](#git-hooks). See [`CLAUDE.md`](./CLAUDE.md) for project conventions and the rationale
 behind the setup.
 
+## Testing
+
+Tests run on **[Vitest](https://vitest.dev)** with **React Testing Library** in a jsdom environment.
+Config is in `vitest.config.ts` (it extends `vite.config.ts`); tests live beside the code they cover
+as `*.test.ts(x)`.
+
+```bash
+pnpm test          # watch mode
+pnpm test:run      # one-shot (CI + pre-push)
+pnpm test:coverage # with a v8 coverage report
+```
+
+For the full setup — the decisions, the gotchas, and a from-scratch recipe — see
+[`docs/vitest-setup.md`](docs/vitest-setup.md).
+
 ## Git hooks
 
 Git hooks run locally via **[Husky](https://typicode.github.io/husky)** and install themselves on
@@ -57,7 +77,8 @@ Git hooks run locally via **[Husky](https://typicode.github.io/husky)** and inst
   [secretlint](https://github.com/secretlint/secretlint) on staged files, auto-fixing and
   re-staging where safe.
 - **commit-msg** — enforces [Conventional Commits](#commit-messages) (commitlint).
-- **pre-push** — runs `pnpm build`, so type/bundle errors are caught before you push.
+- **pre-push** — runs `pnpm build` then `pnpm test:run`, so type/bundle/test errors are caught
+  before you push.
 
 Bypass for a single command with `--no-verify` (e.g. `git commit --no-verify`), or skip hook
 installation entirely with `HUSKY=0`.
@@ -66,10 +87,11 @@ installation entirely with `HUSKY=0`.
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gates on every
 pull request and on push to `main`. CI is the authoritative check — it mirrors the local hooks on the
-server, so nothing broken lands even if a hook was bypassed or skipped. Three jobs:
+server, so nothing broken lands even if a hook was bypassed or skipped. Four jobs:
 
 - **Lint, typecheck & build** — `biome ci` (read-only lint + format) then `pnpm build`
   (`tsc -b && vite build`).
+- **Test (Vitest)** — `pnpm test:run` (`vitest run`); mirrors the pre-push test step.
 - **Secret scan** — [gitleaks](https://github.com/gitleaks/gitleaks-action) over the full git history.
 - **Commit messages** — [commitlint](#commit-messages) on the PR's commits (backstop to the local
   `commit-msg` hook).
@@ -77,9 +99,10 @@ server, so nothing broken lands even if a hook was bypassed or skipped. Three jo
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
 `package.json`, so local, hooks, and CI all run the same versions.
 
-`main` is **branch-protected**: changes land via PR, and all three checks must pass (with the branch
-up to date) before merging — enforced on admins too. The CD checks are intentionally *not* required
-(they skip on PRs or depend on Cloudflare).
+`main` is **branch-protected**: changes land via PR, and the required CI checks must pass (with the
+branch up to date) before merging — enforced on admins too. Add the new **Test** check to the
+required set once it has run on a PR. The CD checks are intentionally *not* required (they skip on
+PRs or depend on Cloudflare).
 
 ## Deployment (Cloudflare Workers)
 
@@ -126,7 +149,8 @@ deployments” → check `prod` → Approve and deploy**. It promotes the same a
 > **Ordering rule:** only tag a commit that has **landed on `main` and finished its `build`** — that
 > run is what produced the `dist-<sha>` artifact the tag deploys promote. Tagging anything else fails
 > the deploy loudly (by design) rather than silently rebuilding. A malformed tag (e.g. `v1.2`,
-> `v1.2.3-beta`) classifies as `none` and deploys nothing.
+> `v1.2.3-beta`) classifies as `none` and deploys nothing, and a version that isn't higher than the
+> latest release (a lower or duplicate number) is rejected by CI before any deploy.
 
 **Rollback:** every deploy records a Worker version — roll back per env with `wrangler rollback`, or
 re-tag/redeploy a previous good commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
