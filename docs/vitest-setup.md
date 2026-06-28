@@ -53,13 +53,18 @@ adversarial review — which flagged two real things to verify: that `vite.confi
 
 - **`vitest.config.ts`** — `mergeConfig(viteConfig, defineConfig({ test: … }))` importing from
   `vitest/config`. Test block: `environment: "jsdom"`, `globals: true`,
-  `setupFiles: ["./src/test/setup.ts"]`, `include: ["src/**/*.{test,spec}.{ts,tsx}"]`. (Vitest's
+  `setupFiles: ["./src/test/setup.ts"]`,
+  `include: ["src/**/*.{test,spec}.{ts,tsx}", "worker/**/*.{test,spec}.ts"]`. (Vitest's
   globber **does** support `{…}` braces — unlike tsconfig; see §4.1.)
-- **`src/test/setup.ts`** — one line: `import "@testing-library/jest-dom/vitest"` (registers the
-  jest-dom matchers on Vitest's `expect`). Runs before every test file.
+- **`src/test/setup.ts`** — registers the jest-dom matchers on Vitest's `expect`
+  (`import "@testing-library/jest-dom/vitest"`) and stubs `window.matchMedia` (jsdom omits it; the
+  `ThemeProvider` `system`-theme path reads it). Runs before every test file.
 - **`tsconfig.test.json`** — isolated project mirroring `tsconfig.app.json` but with
-  `types: ["vitest/globals", "@testing-library/jest-dom"]` and `lib: ["ES2023", "DOM"]`,
-  `jsx: "react-jsx"`. `include` enumerates the test globs + `src/test` (no braces — see §4.1).
+  `types: ["vitest/globals", "@testing-library/jest-dom", "vite/client"]` and `lib: ["ES2023", "DOM"]`,
+  `jsx: "react-jsx"`. `include` enumerates the test globs + `src/test` + `worker/**/*.test.ts` (no
+  braces — see §4.1), so Worker-side tests type-check here with the test toolchain;
+  `tsconfig.worker.json` correspondingly **excludes** `worker/**/*.test.ts` so no file is claimed by
+  two projects.
 - **`src/App.test.tsx`** — RTL smoke test: `render(<App />)`, assert the heading, the button, and the
   `env: local` fallback render.
 - **`src/lib/app-config.test.ts`** — unit test of `getConfig()`'s fallback vs injected-config paths.

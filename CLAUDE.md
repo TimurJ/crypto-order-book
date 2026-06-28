@@ -60,7 +60,8 @@ Config is `vitest.config.ts`; tests live beside the code they cover as `*.test.t
 - **`vitest.config.ts`** `mergeConfig`s the app's `vite.config.ts`, so tests inherit the `@`→`src`
   alias and the `react()`/`tailwindcss()` plugins (the `runtimeConfig` plugin is inert under test).
   Settings: `environment: "jsdom"`, `globals: true`, `setupFiles: ["./src/test/setup.ts"]` (the setup
-  file registers jest-dom matchers via `@testing-library/jest-dom/vitest`).
+  file registers jest-dom matchers via `@testing-library/jest-dom/vitest` and stubs `window.matchMedia`,
+  which jsdom omits — needed by `ThemeProvider`'s `system`-theme path).
 - **`globals: true`** gives both import-free `describe`/`it`/`expect` and the global `afterEach` RTL
   needs for automatic DOM cleanup.
 - **Type isolation:** a dedicated **`tsconfig.test.json`** (4th project reference, like the Worker's)
@@ -214,6 +215,15 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   prod-only `createRoot` hooks + global `window` handlers cover what the boundary structurally can't (async /
   uncaught). **Full architecture, decisions & roadmap (per-widget boundaries, Sentry):**
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
+- **Security headers:** CSP + `nosniff`/`X-Frame-Options`/`Referrer-Policy`/`Permissions-Policy`/HSTS,
+  split across **`public/_headers`** (document + assets; Vite copies it to `dist/`) and
+  **`worker/config-response.ts`** (`nosniff` on `/config.js` — Cloudflare's `_headers` does **not**
+  apply to Worker-generated responses). `script-src` and `style-src` are both a clean `'self'` (the
+  theme-toggle transition suppression uses a bundled `.theme-transitions-off` class, not a runtime
+  `<style>`). **`connect-src`/`style-src` are project-specific**, and per-env exchange origins will
+  later push the CSP into the Worker (a build-once `_headers` file is env-identical). HSTS is hygiene
+  (`.dev` is already preload-forced).
+  **Rationale, the coverage boundary & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,
   `erasableSyntaxOnly`, `noUnusedLocals`/`noUnusedParameters`. Build uses project references
   (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json` + `tsconfig.worker.json` — the last

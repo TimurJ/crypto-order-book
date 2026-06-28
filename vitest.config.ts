@@ -14,7 +14,7 @@ export default mergeConfig(
       // React Testing Library the global afterEach it hooks into for automatic cleanup between tests.
       globals: true,
       setupFiles: ["./src/test/setup.ts"],
-      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+      include: ["src/**/*.{test,spec}.{ts,tsx}", "worker/**/*.{test,spec}.ts"],
     },
   })
 )

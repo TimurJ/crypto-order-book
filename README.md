@@ -185,6 +185,29 @@ see the **Manual setup** section of [`docs/cd-setup.md`](docs/cd-setup.md). Loca
 `pnpm deploy:dev` / `:uat` / `:prod`; `wrangler dev` runs the Worker + SPA locally (it needs the
 `workerd` build — see the `allowBuilds` block in `pnpm-workspace.yaml`).
 
+## Security headers
+
+Responses are hardened with a CSP plus `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`, `Permissions-Policy`, and HSTS. They live in **two** places, split along a hard
+Cloudflare boundary:
+
+- [`public/_headers`](public/_headers) — applied by Static Assets to the document + bundled assets
+  (Vite copies it to `dist/`). This is where the CSP and `frame-ancestors` actually matter.
+- [`worker/config-response.ts`](worker/config-response.ts) — sets `nosniff` on `/config.js`, because
+  Cloudflare's `_headers` does **not** apply to Worker-generated responses.
+
+Verify locally:
+
+```bash
+pnpm build && pnpm exec wrangler dev --env dev
+curl -sI http://localhost:8787/           # full header set from _headers
+curl -sI http://localhost:8787/config.js  # nosniff + no-store from the Worker (no CSP — proves the split)
+```
+
+> **`connect-src` / `style-src` are project-specific** — `_headers` ships unchanged to all three
+> envs (build-once-promote), so per-env exchange `wss://` origins will eventually push the CSP into
+> the Worker. Rationale, the HSTS-on-`.dev` nuance, and the roadmap: [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
+
 ## Commit messages
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org) — the `commit-msg`
