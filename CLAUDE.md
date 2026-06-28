@@ -20,6 +20,10 @@ and Tabler icons). Package manager is **pnpm**.
 | `pnpm dev` | Vite dev server |
 | `pnpm build` | `tsc -b && vite build` (type-checks via project refs, then bundles) |
 | `pnpm preview` | Serve the production build |
+| `pnpm test` | `vitest` (watch mode) |
+| `pnpm test:run` | `vitest run` (one-shot; used by CI + pre-push) |
+| `pnpm test:ui` | `vitest --ui` (browser test dashboard) |
+| `pnpm test:coverage` | `vitest run --coverage` (v8 coverage) |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | `biome lint` (read-only) |
 | `pnpm format` | `biome format --write` |
@@ -45,6 +49,28 @@ formatting. It replaced ESLint + Prettier. Config lives in `biome.json`.
 - **Convention: fix lint findings in code. Do not add `biome-ignore` / `eslint-disable`**
   unless genuinely unavoidable — exhaust refactors first.
 
+## Testing — Vitest
+
+Tests run on **Vitest 4** (pinned exact, like Biome) with **React Testing Library** + **jsdom**.
+Config is `vitest.config.ts`; tests live beside the code they cover as `*.test.ts(x)`.
+
+- **`vitest.config.ts`** `mergeConfig`s the app's `vite.config.ts`, so tests inherit the `@`→`src`
+  alias and the `react()`/`tailwindcss()` plugins (the `runtimeConfig` plugin is inert under test).
+  Settings: `environment: "jsdom"`, `globals: true`, `setupFiles: ["./src/test/setup.ts"]` (the setup
+  file registers jest-dom matchers via `@testing-library/jest-dom/vitest`).
+- **`globals: true`** gives both import-free `describe`/`it`/`expect` and the global `afterEach` RTL
+  needs for automatic DOM cleanup.
+- **Type isolation:** a dedicated **`tsconfig.test.json`** (4th project reference, like the Worker's)
+  confines `vitest/globals` + jest-dom types to tests; test files are excluded from
+  `tsconfig.app.json`. It's in the root `references`, so **`tsc -b` (`pnpm build`) type-checks tests
+  too** (deliberate). **Gotcha:** tsconfig globs support only `* ? **` — **no `{a,b}` brace
+  expansion** — so the test patterns are enumerated.
+- **No mocking for `<App />`:** `getConfig()` falls back to `{ env: "local", … }` when
+  `window.__APP_CONFIG__` is unset; assert via roles/text (RTL), not implementation details.
+
+**Full setup, gotchas, and a from-scratch recipe:** [`docs/vitest-setup.md`](docs/vitest-setup.md)
+(keep it updated when the setup itself changes).
+
 ## Git hooks — Husky
 
 Three local git hooks, managed by **Husky 9** (self-installing via `"prepare": "husky"`, which
@@ -62,8 +88,9 @@ the whole-project build at push:
 - **`commit-msg` → `pnpm exec commitlint --edit "$1"`.** Enforces **Conventional Commits**
   (`@commitlint/config-conventional`; config is the `commitlint` block in `package.json`). Subjects
   must be `type(scope): summary` — `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, etc.
-- **`pre-push` → `pnpm build`.** Runs the *real* build (`tsc -b && vite build`) before a push, so
-  type/bundle breakage is caught locally rather than in CI. (`pnpm test` joins here once vitest lands.)
+- **`pre-push` → `pnpm build` then `pnpm test:run`.** Runs the *real* build (`tsc -b && vite build`)
+  and the test suite (`vitest run`) before a push, so type/bundle/test breakage is caught locally
+  rather than in CI.
 - **Skipping:** `HUSKY=0` skips hook install (Docker/CI); `git commit --no-verify` /
   `git push --no-verify` bypass for a single run. For GUI/IDE commits that don't load your Node
   version manager, put its init in `~/.config/husky/init.sh`.
@@ -72,12 +99,14 @@ the whole-project build at push:
 
 CI lives in `.github/workflows/ci.yml` and runs on **pull requests** and **pushes to `main`**. It is
 the *authoritative* gate — it re-runs the local hooks' checks on the server, so bypassed/skipped hooks
-(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Three parallel
+(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Four parallel
 jobs, each a distinct PR check (clean targets for branch protection):
 
-- **`verify`** — the only job that installs deps: `pnpm install --frozen-lockfile`, then `pnpm biome ci`
-  (read-only lint + format, emits GitHub annotations) and `pnpm build` (`tsc -b && vite build` —
-  typecheck + bundle). Mirrors the pre-commit Biome and pre-push build hooks.
+- **`verify`** — `pnpm install --frozen-lockfile`, then `pnpm biome ci` (read-only lint + format,
+  emits GitHub annotations) and `pnpm build` (`tsc -b && vite build` — typecheck + bundle). Mirrors
+  the pre-commit Biome and pre-push build hooks.
+- **`test`** — `pnpm install --frozen-lockfile`, then `pnpm test:run` (`vitest run`). Mirrors the
+  pre-push test step; same setup block as `verify`.
 - **`secrets`** — `gitleaks/gitleaks-action@v3` with `fetch-depth: 0` (full-history scan), a deep
   backstop to the staged-file secretlint hook. Free for personal accounts; under a GitHub **org** it
   needs a free `GITLEAKS_LICENSE` secret.
@@ -96,8 +125,9 @@ Design decisions:
   setup-node's `cache: pnpm` needs the pnpm binary to resolve the store path.
 - **Hygiene:** least-privilege `permissions: contents: read` (the `commits` job adds `pull-requests:
   read`); a `concurrency` group cancels superseded runs on a branch; actions are pinned to major tags.
-- **No `test` job yet** — a Vitest job (same setup as `verify`) lands when tests do, matching the
-  `pnpm test` TODO in `.husky/pre-push`.
+- **`test` is its own job, not folded into `verify`** — keeps one clean PR check per concern
+  (distinct branch-protection targets) at the cost of a second `pnpm install`. After it runs once on
+  a PR, add it to `main`'s required checks.
 
 ## CD — Cloudflare Workers
 
@@ -118,7 +148,9 @@ Invariants to preserve when editing the pipeline:
   run per SHA, tripping the cross-run resolver's "exactly one run" invariant). Only DEV shares a run
   with `build`; UAT/PROD depend on `classify` alone.
 - env config is runtime via `/config.js`, **never `VITE_*`** (see Architecture / `src/lib/app-config.ts`).
-- tag classification: `vX.Y.Z` → prod, `…-rc.N` → uat, else `none` (deploys nothing).
+- tag classification: `vX.Y.Z` → prod, `…-rc.N` → uat, else `none` (deploys nothing); a follow-on
+  step also **rejects a non-increasing version core** (compared against the latest release tag),
+  failing the job before any deploy.
 - per-env `CLOUDFLARE_API_TOKEN` secrets; CF `Workers Scripts:Edit` is account-wide (so the win is
   revocable-per-env creds + prod-gating, not per-script lockdown).
 
@@ -171,7 +203,9 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   `erasableSyntaxOnly`, `noUnusedLocals`/`noUnusedParameters`. Build uses project references
   (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json` + `tsconfig.worker.json` — the last
   type-checks `worker/` with `@cloudflare/workers-types`, isolated from the app's DOM lib). Target
-  es2023, `moduleResolution: "bundler"`.
+  es2023, `moduleResolution: "bundler"`. A 4th reference, `tsconfig.test.json`, type-checks test
+  files with `vitest/globals` + jest-dom types (isolated from app/worker, like the worker project);
+  see [Testing — Vitest](#testing--vitest).
 
 ## Conventions / gotchas
 

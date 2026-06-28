@@ -1,10 +1,15 @@
 {
+  // Isolated project for test files — mirrors how tsconfig.worker.json isolates the Worker's types.
+  // Confines vitest globals + jest-dom matcher types to tests (kept out of the app/worker projects),
+  // while reusing the app's DOM lib, JSX transform, and `@`→src paths. Referenced by tsconfig.json
+  // so `tsc -b` (pnpm build) type-checks tests too; test files are excluded from tsconfig.app.json
+  // so no file is claimed by two projects.
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vite/client"],
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -25,11 +30,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  // Test files live in their own project (tsconfig.test.json) so vitest/jest-dom types don't leak
-  // into the app build; excluding them here keeps each file in exactly one project for `tsc -b`.
   // NB: tsconfig globs support only * ? ** (no {a,b} brace expansion), so patterns are enumerated.
-  "exclude": [
+  "include": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.spec.ts",
