@@ -173,6 +173,10 @@ re-tag/redeploy a previous good commit. Live URLs: `crypto-order-book-{dev,uat,p
   put env config in `VITE_*` vars or `public/`.
 - **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
   `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job.
+- **Post-deploy smoke test** — each deploy then `curl --fail`s the env's `/` and `/config.js`
+  (with retries for edge propagation), so a broken deploy fails the job instead of being found by hand.
+- **Workers Logs on** — `observability` is enabled in [`wrangler.jsonc`](wrangler.jsonc) (off by
+  default), so logs and uncaught exceptions are captured for every env.
 
 Full detail — the decisions, the account-wide-token caveat, and the gotchas — is in
 [`docs/cd-setup.md`](docs/cd-setup.md).

@@ -151,6 +151,11 @@ Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions up
 posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
 PROD, gated on the prod GitHub Environment's required reviewer.
 
+Each deploy job **smoke-tests** the env right after `wrangler deploy` (`curl --fail` on `/` and
+`/config.js`, with `--retry-all-errors` for edge propagation), so a broken deploy fails loudly.
+**Workers Logs** are on via top-level `"observability": { "enabled": true }` in `wrangler.jsonc`
+(logs are off by default; `observability` is inheritable, so the one block covers all three envs).
+
 Invariants to preserve when editing the pipeline:
 
 - `build` is **main-only**; UAT/PROD download the `dist-<sha>` artifact and **never rebuild** — do
