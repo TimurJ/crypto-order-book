@@ -30,20 +30,22 @@ function getSystemTheme(): ResolvedTheme {
   return "light"
 }
 
+const TRANSITION_SUPPRESS_CLASS = "theme-transitions-off"
+
 function disableTransitionsTemporarily() {
-  const style = document.createElement("style")
-  style.appendChild(
-    document.createTextNode(
-      "*,*::before,*::after{-webkit-transition:none!important;transition:none!important}"
-    )
-  )
-  document.head.appendChild(style)
+  const root = document.documentElement
+  root.classList.add(TRANSITION_SUPPRESS_CLASS)
 
   return () => {
+    // Force a style/layout recalc so the theme swap commits while transitions are still suppressed,
+    // then re-enable on a later frame. This reflow + double-rAF is LOAD-BEARING and must not be
+    // simplified: a class toggle is a cheaper style invalidation than the original <style> insertion,
+    // so re-enabling too eagerly can re-arm transitions before the swap paints and bring the color
+    // smear back. The matching CSS rule lives in src/index.css.
     window.getComputedStyle(document.body)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        style.remove()
+        root.classList.remove(TRANSITION_SUPPRESS_CLASS)
       })
     })
   }

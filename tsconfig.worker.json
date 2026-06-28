@@ -21,5 +21,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["worker"]
+  "include": ["worker"],
+  // Test files are claimed by tsconfig.test.json (vitest globals + DOM lib), so keep them out of
+  // this project — mirrors how the app project excludes tests. No file is claimed by two projects.
+  "exclude": ["worker/**/*.test.ts"]
 }

@@ -5,37 +5,27 @@
 // Keeping env config here (not in `import.meta.env`) is what makes build-once-promote work: the
 // same built bundle is deployed unchanged to dev/uat/prod, and only this response differs.
 //
+// Security headers: the static document + assets get theirs from public/_headers (served directly
+// by Static Assets). Cloudflare's `_headers` does NOT apply to Worker-generated responses, so
+// /config.js sets its own header (nosniff) in configResponse — see worker/config-response.ts.
+//
 // Future API routes / Durable Object + Container bindings branch here before the ASSETS fallback.
 
-interface Env {
-  ASSETS: Fetcher
-  APP_ENV: string
-  API_BASE_URL: string
-  WS_URL: string
-}
+import { configResponse, type RuntimeConfigEnv } from "./config-response.ts"
 
-function configScript(env: Env): string {
-  const config = {
-    env: env.APP_ENV,
-    apiBaseUrl: env.API_BASE_URL,
-    wsUrl: env.WS_URL,
-  }
-  return `window.__APP_CONFIG__ = ${JSON.stringify(config)}`
+interface Env extends RuntimeConfigEnv {
+  ASSETS: Fetcher
 }
 
 export default {
   fetch(request: Request, env: Env): Response | Promise<Response> {
     const url = new URL(request.url)
 
-    // Per-environment runtime config. `no-store` because it differs per env and must never be
-    // cached at the edge/browser and outlive a deploy. Routed worker-first via run_worker_first.
+    // Per-environment runtime config. Worker-generated, so `_headers` can't touch it; its headers
+    // (`cache-control: no-store`, `nosniff`) are set in configResponse. Routed worker-first via
+    // run_worker_first in wrangler.jsonc.
     if (url.pathname === "/config.js") {
-      return new Response(configScript(env), {
-        headers: {
-          "content-type": "application/javascript; charset=utf-8",
-          "cache-control": "no-store",
-        },
-      })
+      return configResponse(env)
     }
 
     // Static assets, with SPA fallback to index.html (assets.not_found_handling in wrangler.jsonc).
