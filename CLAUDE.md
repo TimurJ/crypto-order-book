@@ -49,6 +49,9 @@ formatting. It replaced ESLint + Prettier. Config lives in `biome.json`.
 - **Convention: fix lint findings in code. Do not add `biome-ignore` / `eslint-disable`**
   unless genuinely unavoidable — exhaust refactors first.
 
+**Full setup, gotchas, and a from-scratch recipe:** [`docs/biome-setup.md`](docs/biome-setup.md) (keep
+it updated when the setup itself changes).
+
 ## Testing — Vitest
 
 Tests run on **Vitest 4** (pinned exact, like Biome) with **React Testing Library** + **jsdom**.
@@ -95,6 +98,9 @@ the whole-project build at push:
   `git push --no-verify` bypass for a single run. For GUI/IDE commits that don't load your Node
   version manager, put its init in `~/.config/husky/init.sh`.
 
+**Full setup, gotchas, and a from-scratch recipe:** [`docs/husky-setup.md`](docs/husky-setup.md) (keep
+it updated when the setup itself changes).
+
 ## CI — GitHub Actions
 
 CI lives in `.github/workflows/ci.yml` and runs on **pull requests** and **pushes to `main`**. It is
@@ -128,6 +134,9 @@ Design decisions:
 - **`test` is its own job, not folded into `verify`** — keeps one clean PR check per concern
   (distinct branch-protection targets) at the cost of a second `pnpm install`. After it runs once on
   a PR, add it to `main`'s required checks.
+
+**Full setup, gotchas, and a from-scratch recipe:** [`docs/ci-setup.md`](docs/ci-setup.md) (keep it
+updated when the setup itself changes).
 
 ## CD — Cloudflare Workers
 
