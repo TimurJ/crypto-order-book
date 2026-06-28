@@ -183,6 +183,16 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --env dev
+      # Verify the deploy actually serves before calling it done: the SPA document AND /config.js
+      # (the Worker-generated route — a different code path than static assets). --retry-all-errors
+      # absorbs the few-second edge propagation after deploy. No secrets needed (public URL).
+      - name: Smoke test
+        run: |
+          BASE="https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Smoke OK: $BASE"
 
   # UAT: triggered by an rc tag. Promotes the artifact the main build produced for this SHA.
   deploy-uat:
@@ -233,6 +243,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --env uat
+      - name: Smoke test
+        run: |
+          BASE="https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Smoke OK: $BASE"
 
   # PROD: triggered by a release tag. Same cross-run artifact; gated on the prod Environment's
   # required reviewer. A plain `wrangler deploy` still records a Worker version, so rollback is
@@ -285,3 +302,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy --env prod
+      - name: Smoke test
+        run: |
+          BASE="https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Smoke OK: $BASE"

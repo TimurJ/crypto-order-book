@@ -51,10 +51,13 @@ second reviewer twice (which caught two real bugs — see §4).
 ## 3. What was built, file by file
 
 - **`wrangler.jsonc`** — one config, three **named environments** (`[env.dev|uat|prod]`), each a
-  separate Worker script (`crypto-order-book-{dev,uat,prod}`). Top-level `main`, `assets`, and
-  `compatibility_date` **inherit** to every env (only bindings/`vars` are non-inheritable, so `vars`
-  is repeated per env). `assets`: `directory: ./dist`, `binding: ASSETS`,
-  `not_found_handling: single-page-application`, `run_worker_first: ["/config.js"]`.
+  separate Worker script (`crypto-order-book-{dev,uat,prod}`). Top-level `main`, `assets`,
+  `compatibility_date`, and `observability` **inherit** to every env (only bindings/`vars` are
+  non-inheritable, so `vars` is repeated per env). `assets`: `directory: ./dist`, `binding: ASSETS`,
+  `not_found_handling: single-page-application`, `run_worker_first: ["/config.js"]`. **Workers Logs**
+  are on via a single top-level `"observability": { "enabled": true }` (logs are **off by default**) —
+  verified inherited by all three envs: a contrastive dry-run warns only that top-level `vars` "is not
+  inherited", never `observability`.
 - **`worker/index.ts`** — a thin Worker. For `/config.js` it returns JS setting
   `window.__APP_CONFIG__` from the env's `vars`, with `Cache-Control: no-store`. Everything else
   falls through to `env.ASSETS.fetch(request)` (SPA fallback to `index.html`). Future API/DO/Container
@@ -81,17 +84,24 @@ second reviewer twice (which caught two real bugs — see §4).
 | `classify` | tag push | regex the tag → `channel` (`prod` `vX.Y.Z` / `uat` `…-rc.N` / `none`), and **reject a non-increasing version** vs the latest release tag |
 | `build` | **push to `main` only** | `pnpm build` → upload artifact `dist-<sha>` (90-day retention) |
 | `preview` | PR (same-repo) | `wrangler versions upload --env dev` → comment the preview URL |
-| `deploy-dev` | push to `main` | download same-run artifact → `wrangler deploy --env dev` |
-| `deploy-uat` | `needs: classify`, channel `uat` | cross-run download `dist-<sha>` → `wrangler deploy --env uat` |
-| `deploy-prod` | `needs: classify`, channel `prod` | gated on prod reviewer → cross-run download → `wrangler deploy --env prod` |
+| `deploy-dev` | push to `main` | download same-run artifact → `wrangler deploy --env dev` → **smoke test** |
+| `deploy-uat` | `needs: classify`, channel `uat` | cross-run download `dist-<sha>` → `wrangler deploy --env uat` → **smoke test** |
+| `deploy-prod` | `needs: classify`, channel `prod` | gated on prod reviewer → cross-run download → `wrangler deploy --env prod` → **smoke test** |
 
 **Build-once linchpin:** `build` runs *only* on the `main` merge, producing exactly one `dist-<sha>`.
 Tag deploys never rebuild — they resolve the main-build run for the tag's SHA
 (`gh run list --workflow cd.yml --commit <sha> --branch main`, fail loudly on ≠1 match) and
 `actions/download-artifact` it cross-run. Only `deploy-dev` shares a run with `build`.
 
+**Post-deploy smoke test:** each deploy job, right after `wrangler deploy`, `curl --fail`s the env's
+`/` **and** `/config.js` (`--retry 3 --retry-delay 3 --retry-all-errors` absorbs the few-second edge
+propagation). A broken deploy now fails the job loudly instead of being noticed by hand — this
+automates the manual check in §6 step 2. `/config.js` is checked separately because it's the
+Worker-generated route (a different code path than the static assets). No secrets needed (public URL).
+
 **Inert until configured:** deploy/preview jobs gate on `vars.CLOUDFLARE_ACCOUNT_ID != ''`, so the
-workflow no-ops (green, no red X) until credentials exist.
+workflow no-ops (green, no red X) until credentials exist — the smoke test rides inside those guarded
+jobs, so it first runs on the next `main` merge once creds are set.
 
 ---
 
