@@ -94,7 +94,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build # tsc -b && vite build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ github.sha }}
           path: dist
@@ -136,7 +136,7 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
       - name: Comment preview URL
         if: steps.upload.outputs.url != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PREVIEW_URL: ${{ steps.upload.outputs.url }}
         with:
@@ -176,7 +176,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Download built artifact (same run)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist-${{ github.sha }}
           path: dist
@@ -234,7 +234,7 @@ jobs:
           fi
           echo "run_id=$(echo "$RUNS" | jq -r '.[0]')" >> "$GITHUB_OUTPUT"
       - name: Download the pre-built artifact (build-once)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist-${{ github.sha }}
           path: dist
@@ -293,7 +293,7 @@ jobs:
           fi
           echo "run_id=$(echo "$RUNS" | jq -r '.[0]')" >> "$GITHUB_OUTPUT"
       - name: Download the pre-built artifact (build-once)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist-${{ github.sha }}
           path: dist
