@@ -53,6 +53,8 @@ replaced ESLint + Prettier. Configuration is in `biome.json`. Quality is enforce
 [git hooks](#git-hooks). See [`CLAUDE.md`](./CLAUDE.md) for project conventions and the rationale
 behind the setup.
 
+For the full migration history, the decisions, and the gotchas, see [`docs/biome-setup.md`](docs/biome-setup.md).
+
 ## Testing
 
 Tests run on **[Vitest](https://vitest.dev)** with **React Testing Library** in a jsdom environment.
@@ -83,6 +85,8 @@ Git hooks run locally via **[Husky](https://typicode.github.io/husky)** and inst
 Bypass for a single command with `--no-verify` (e.g. `git commit --no-verify`), or skip hook
 installation entirely with `HUSKY=0`.
 
+For the full setup history, the decisions, and the gotchas, see [`docs/husky-setup.md`](docs/husky-setup.md).
+
 ## Continuous integration
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gates on every
@@ -103,6 +107,8 @@ Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageM
 branch up to date) before merging — enforced on admins too. Add the new **Test** check to the
 required set once it has run on a PR. The CD checks are intentionally *not* required (they skip on
 PRs or depend on Cloudflare).
+
+For the full setup history, the decisions, and the gotchas, see [`docs/ci-setup.md`](docs/ci-setup.md).
 
 ## Deployment (Cloudflare Workers)
 
