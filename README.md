@@ -112,6 +112,24 @@ PRs or depend on Cloudflare).
 
 For the full setup history, the decisions, and the gotchas, see [`docs/ci-setup.md`](docs/ci-setup.md).
 
+## Dependency updates
+
+[Dependabot](https://docs.github.com/en/code-security/dependabot) keeps dependencies and the pinned
+GitHub Actions current, configured in [`.github/dependabot.yml`](.github/dependabot.yml). It opens
+**weekly** PRs for two ecosystems — npm (pnpm) and github-actions — batching non-major updates into
+grouped PRs (separate production / development) while leaving majors as individual PRs for isolated
+review. New releases (npm packages **and** pinned actions) are held for a 7-day **cooldown** before bumping
+(supply-chain hygiene); security updates bypass the cooldown and arrive immediately.
+
+Dependabot PRs run the full CI suite and must pass the same required checks as any other PR. Two
+integration notes: its commit messages carry a `chore(deps)` / `ci(deps)` prefix so they satisfy the
+Conventional-Commits check, and the CD preview job is skipped for them (Dependabot runs get no access to
+deploy secrets). Dependabot **alerts** and **security updates** are enabled in the repo's security
+settings (separate from the version updates above).
+
+For the full setup — the decisions, the gotchas, and a from-scratch recipe — see
+[`docs/dependabot-setup.md`](docs/dependabot-setup.md).
+
 ## Deployment (Cloudflare Workers)
 
 The app deploys to **Cloudflare Workers** with

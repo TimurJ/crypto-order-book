@@ -1,0 +1,134 @@
+# Production Readiness Audit
+
+A grounded audit of what `crypto-order-book` still needs to be production-ready, based on the
+actual state of the repo (source, both CI/CD workflows, wrangler/vite config, gitignore).
+
+> **Status context:** This is still an **early scaffold** — `src/App.tsx` is the shadcn starter
+> page and there's no order-book domain code yet. The tooling/CI/CD foundation (Biome, git hooks,
+> GitHub Actions, three-env Cloudflare CD) is strong. The single most important "production-ready"
+> need is the actual app; everything below is the foundation to lay before/alongside the features.
+
+Items are ordered by impact. Tier 1 closes real holes; Tier 2 is production operations; Tier 3 is
+polish.
+
+---
+
+## Tier 1 — Real gaps (do alongside the first features)
+
+### 1. Automated tests — the missing pillar of the quality gate ✅ DONE
+- [x] Add **Vitest 4 + React Testing Library + jsdom** (`vitest.config.ts`, `src/test/setup.ts`)
+- [x] Add `test` scripts to `package.json` (`test`, `test:run`, `test:ui`, `test:coverage`)
+- [x] Wire `pnpm test:run` into `.husky/pre-push` (after `pnpm build`)
+- [x] Add a CI `test` job to `.github/workflows/ci.yml` (mirrors the `verify` setup block)
+- [x] Isolate test types in `tsconfig.test.json` (4th project ref; `tsc -b` type-checks tests)
+- [x] Seed coverage: `src/App.test.tsx` (RTL smoke) + `src/lib/app-config.test.ts` (unit)
+- [x] **Follow-up (user/git):** add the **Test** check to `main`'s required branch-protection checks
+      once it has run on a PR
+
+**Why:** Previously there was no test runner, no `test` script, and no test files — `tsc -b &&
+vite build` was the *only* automated safety net (type/bundle errors, nothing behavioral). Now Vitest
+runs locally (watch/UI/coverage), on pre-push, and in CI as a distinct check.
+
+### 2. Root error boundary ✅ DONE
+- [x] Top-level React error boundary + fallback UI around `<App />` in `src/main.tsx`
+      (`RootErrorBoundary` + `RootErrorFallback`, built on `react-error-boundary`)
+- [x] Sentry-ready reporting seam `reportError()` (`src/lib/report-error.ts`) — every channel funnels through it
+- [x] React 19 prod-only `createRoot` hooks (`onUncaughtError`/`onRecoverableError`) + global `window`
+      `unhandledrejection`/`error` handlers for the async/uncaught errors a boundary can't catch
+- [x] Test: `src/components/root-error-boundary.test.tsx` (throw → fallback → recover)
+- [ ] **Deferred:** per-widget error boundaries (one bad widget shouldn't kill the page) — when widgets exist
+- [ ] **Deferred:** swap `reportError` → Sentry (see #4)
+- [ ] **Deferred:** route-level boundaries — when a router is added
+
+**Architecture, decisions & roadmap:** [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
+
+**Why:** `main.tsx` mounted `<ThemeProvider><App/></ThemeProvider>` with no error boundary — any
+render-time throw white-screened the whole app with no recovery. The boundary closes that for the React
+tree, and the seam is the natural hook point for error reporting (#4). Note a boundary **can't** catch
+async errors (the real order-book risk) — that hardening lives in the WS/data layer (see the doc's roadmap).
+
+### 3. Security headers ✅ DONE
+- [x] `public/_headers` (→ `dist/_headers`) sets the full set on the document + assets:
+  `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` + CSP `frame-ancestors`,
+  `Referrer-Policy`, `Permissions-Policy` (empty-allowlist `feature=()` syntax), HSTS (plain
+  `max-age` — `.dev` is already preload-forced, so no `includeSubDomains`/`preload`)
+- [x] `worker/config-response.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
+  Worker-generated responses (verified: `curl -I /config.js` shows nosniff but no CSP)
+- [x] CSP keeps `script-src 'self'` clean (verified against `dist/index.html`); only `style-src`
+  carries `'unsafe-inline'` (one theme-toggle `<style>`)
+- [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
+  `wrangler dev` + `curl`
+- [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
+      when endpoints diverge per env (a build-once `_headers` file is env-identical)
+- [x] Dropped `style-src 'unsafe-inline'`: the theme-provider's runtime `<style>` injection became a
+      bundled `.theme-transitions-off` class, so the CSP is now a strict `style-src 'self'`
+- [ ] **Deferred:** deep-link/SPA-fallback header coverage once a router lands
+
+**Architecture, decisions & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
+
+**Why:** `worker/index.ts` served assets and `/config.js` but set **no security headers**. Given
+the rest of the repo's security posture (secretlint, gitleaks, the "SPA ships everything to the
+client" warning), this was a notable omission. CSP was very achievable since the only injected
+script is the same-origin `/config.js`.
+
+---
+
+## Tier 2 — Production operations
+
+### 4. Observability
+- [x] Enable Workers logs: add `"observability": { "enabled": true }` to `wrangler.jsonc`
+      (logs are **off by default**) — top-level block, verified inherited by all three envs
+- [ ] Add client-side error tracking (e.g. Sentry) once there's real logic — pairs with the
+      error boundary (#2); a one-line swap of the `reportError()` seam's body. See the Sentry adoption
+      section of [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
+
+**Why:** There's currently no observability at all. Without it, prod failures are invisible.
+
+### 5. Post-deploy smoke test
+- [x] Add a `curl --fail` health check against each env URL after `wrangler deploy` in
+      `.github/workflows/cd.yml` (verifies `/` **and** `/config.js`; `--retry-all-errors` for
+      edge propagation) — runs in all three deploy jobs
+
+**Why:** CD deploys all three envs but never verifies the deploy actually serves. A one-line check
+catches a broken deploy before it's discovered manually — PROD especially.
+
+### 6. Dependency automation ✅ DONE
+- [x] Add `.github/dependabot.yml` (npm + github-actions ecosystems) — weekly, grouped non-majors,
+      `chore(deps)`/`ci(deps)` prefixes, 7-day cooldown (both ecosystems), `versioning-strategy: increase`
+- [x] Resolve the two gate collisions so Dependabot PRs stay green: relaxed commitlint
+      `body-`/`footer-max-line-length` (required check) and guarded the CD `preview` job against
+      `dependabot[bot]` (no Actions secrets on Dependabot runs)
+- [ ] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
+      (`gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts` + `…/automated-security-fixes`)
+
+**Architecture, decisions & roadmap:** [`docs/dependabot-setup.md`](docs/dependabot-setup.md).
+
+**Why:** No Dependabot/Renovate config and no automated dependency updates. Fits the existing
+CI/security posture cleanly.
+
+---
+
+## Tier 3 — Polish & hygiene
+
+### 7. Branding / HTML metadata
+- [ ] Replace the starter `vite.svg` favicon with a real favicon set
+- [ ] Remove the leftover starter asset `src/assets/react.svg`
+- [ ] Add `<meta name="description">`, `theme-color`, and Open Graph tags to `index.html`
+
+### 8. Onboarding templates
+- [ ] Add `.env.example` (it's allowlisted in `.gitignore` but the file doesn't exist)
+- [ ] Add `.dev.vars.example` for the Worker-secrets path documented in `CLAUDE.md`
+
+### 9. Minor
+- [ ] Add a `LICENSE`
+- [ ] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; helps editors with CSS/JSON/MD)
+- [ ] Consider a PR template / `CODEOWNERS` (low priority while solo)
+
+---
+
+## Recommended order
+
+1. **Tests** (Vitest + RTL + jsdom) — unblocks confident iteration on the real order-book code.
+2. ~~**Error boundary**~~ (done) + **security headers** — small, close real production holes.
+3. **Observability** + **smoke test** — quick wins, can land in the same pass.
+4. Everything else as it becomes relevant.

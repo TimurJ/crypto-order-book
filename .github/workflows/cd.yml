@@ -102,10 +102,12 @@ jobs:
           if-no-files-found: error
 
   # PR preview: upload a non-promoted version of the dev Worker and comment its URL on the PR.
-  # Reuses the dev token (so it needs `environment: dev`). Skipped for fork PRs (no secrets).
+  # Reuses the dev token (so it needs `environment: dev`). Skipped for fork PRs (no secrets) and for
+  # Dependabot PRs (Dependabot runs get a read-only token + no Actions secrets, so the token-dependent
+  # upload would fail — a dependency bump needs no visual preview anyway).
   preview:
     name: PR preview
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.CLOUDFLARE_ACCOUNT_ID != ''
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
