@@ -1,0 +1,59 @@
+# Dependabot — automated dependency updates.
+# Docs: https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+#
+# `prefix` is LOAD-BEARING, not cosmetic: without it Dependabot's subject is "Bump …" (capitalised),
+# which fails commitlint's subject-case rule. With a lowercase prefix it lowercases the verb to "bump",
+# so "chore(deps): bump …" / "ci(deps): bump …" pass the REQUIRED `commits` check. Don't remove it.
+version: 2
+
+updates:
+  # ── JavaScript / TypeScript deps (pnpm; "npm" is the package-ecosystem id for pnpm too) ──
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    # App (not a library) with a committed lockfile + mixed exact/caret pins → bump the manifest
+    # version explicitly instead of relying on `auto`. (Exact pins stay exact; carets stay carets.)
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "chore" # → chore(deps): / chore(deps-dev):  (see load-bearing note above)
+      include: "scope"
+    # Supply-chain hardening: hold a brand-new release for 7 days before bumping, so a yanked/compromised
+    # version is likely caught first (7d matches the IaC-scanner norm — e.g. Datadog flags <7). Version
+    # updates only — security updates ignore cooldown and arrive immediately, which is what we want.
+    cooldown:
+      default-days: 7
+    groups:
+      # Batch non-major updates into ≤2 PRs/week. Majors stay UNGROUPED → one PR each, so each
+      # breaking change is reviewed + CI-tested in isolation.
+      production-dependencies:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      development-dependencies:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+
+  # ── GitHub Actions pinned in .github/workflows/ ──
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci" # → ci(deps): bump actions/checkout …
+      include: "scope"
+    # Same 7-day supply-chain cooldown as npm (the tj-actions/changed-files compromise was a GitHub
+    # Action, so the threat model applies here too). Only `default-days` is set — github-actions supports
+    # it but NOT the semver-*-days keys (action versions resolve from git tags, not SemVer ranges).
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"] # all actions in one PR (low volume, low risk)

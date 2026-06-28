@@ -175,6 +175,28 @@ branch-protected (PR + the 3 CI checks, enforced on admins; CD checks not requir
 **Full rationale, gotchas, deferred items, and setup steps:** [`docs/cd-setup.md`](docs/cd-setup.md)
 (keep it updated when the setup itself changes).
 
+## Dependency automation — Dependabot
+
+`.github/dependabot.yml` drives **weekly** dependency PRs for two ecosystems — **npm** (pnpm) and
+**github-actions**. Non-major updates are grouped (separate production/development PRs); majors come
+individually for isolated review. npm **and action** releases get a 7-day **cooldown** (supply-chain
+hygiene); security updates bypass it and arrive immediately. `versioning-strategy: increase` (this is an app).
+**Dependabot over Renovate:** native, zero-infra, matches the Actions-first posture.
+
+Two integrations were required so Dependabot PRs stay green — both because of *existing* gates:
+
+- **commitlint (a required check) vs Dependabot commit bodies.** `@commitlint/config-conventional`'s
+  `body-max-line-length: 100` fails on Dependabot's long bodies → blocked PRs. Fixed by disabling
+  `body-`/`footer-max-line-length` in the `package.json` `commitlint` block (core rules stay strict). The
+  `commit-message.prefix` (`chore`/`ci`, **lowercase**) is **load-bearing** — it forces the subject verb to
+  lowercase `bump` so `subject-case` passes; don't remove it.
+- **CD `preview` job vs Dependabot's secret-less runs.** Dependabot PRs get a read-only token + no Actions
+  secrets, so the token-dependent preview is guarded with `github.actor != 'dependabot[bot]'` (skips, not fails).
+
+`cooldown` covers **both** ecosystems via `default-days`; the `semver-*-days` keys are actions-unsupported
+(tags, not SemVer). Alerts/security updates are enabled in repo settings (separate from version updates).
+**Full rationale, gotchas & from-scratch recipe:** [`docs/dependabot-setup.md`](docs/dependabot-setup.md).
+
 ## Secrets
 
 Never commit secrets / API keys. `.env*` is gitignored (except `.env.example`) — load config from
