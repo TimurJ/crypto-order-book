@@ -64,8 +64,8 @@ Config is `vitest.config.ts`; tests live beside the code they cover as `*.test.t
 - **`globals: true`** gives both import-free `describe`/`it`/`expect` and the global `afterEach` RTL
   needs for automatic DOM cleanup.
 - **Type isolation:** a dedicated **`tsconfig.test.json`** (4th project reference, like the Worker's)
-  confines `vitest/globals` + jest-dom types to tests; test files are excluded from
-  `tsconfig.app.json`. It's in the root `references`, so **`tsc -b` (`pnpm build`) type-checks tests
+  confines `vitest/globals` + jest-dom types to tests (plus `vite/client`, so app modules a test
+  imports can still use `import.meta.env`); test files are excluded from `tsconfig.app.json`. It's in the root `references`, so **`tsc -b` (`pnpm build`) type-checks tests
   too** (deliberate). **Gotcha:** tsconfig globs support only `* ? **` — **no `{a,b}` brace
   expansion** — so the test patterns are enumerated.
 - **No mocking for `<App />`:** `getConfig()` falls back to `{ env: "local", … }` when
@@ -208,13 +208,20 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   builds; a Vite plugin (`runtimeConfig` in `vite.config.ts`) both injects the
   `<script src="/config.js">` into `index.html` (so it's never bundled) and serves it in `pnpm dev`.
   Read config through `src/lib/app-config.ts` (`getConfig()` / `AppConfig`).
+- **Error handling:** a root error boundary (`RootErrorBoundary`, `src/components/root-error-boundary.tsx`,
+  built on **`react-error-boundary`**) wraps the app in `src/main.tsx`; every error channel funnels through
+  one **Sentry-ready** seam, `reportError()` in `src/lib/report-error.ts` (a one-line swap later). React 19's
+  prod-only `createRoot` hooks + global `window` handlers cover what the boundary structurally can't (async /
+  uncaught). **Full architecture, decisions & roadmap (per-widget boundaries, Sentry):**
+  [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,
   `erasableSyntaxOnly`, `noUnusedLocals`/`noUnusedParameters`. Build uses project references
   (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json` + `tsconfig.worker.json` — the last
   type-checks `worker/` with `@cloudflare/workers-types`, isolated from the app's DOM lib). Target
   es2023, `moduleResolution: "bundler"`. A 4th reference, `tsconfig.test.json`, type-checks test
-  files with `vitest/globals` + jest-dom types (isolated from app/worker, like the worker project);
-  see [Testing — Vitest](#testing--vitest).
+  files with `vitest/globals` + jest-dom types — plus `vite/client`, so app modules a test imports can
+  use `import.meta.env` (isolated from app/worker, like the worker project); see
+  [Testing — Vitest](#testing--vitest).
 
 ## Conventions / gotchas
 

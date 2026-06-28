@@ -1,7 +1,8 @@
 {
   // Isolated project for test files — mirrors how tsconfig.worker.json isolates the Worker's types.
   // Confines vitest globals + jest-dom matcher types to tests (kept out of the app/worker projects),
-  // while reusing the app's DOM lib, JSX transform, and `@`→src paths. Referenced by tsconfig.json
+  // while reusing the app's DOM lib, JSX transform, `@`→src paths, and vite/client (so app modules a
+  // test imports — which use `import.meta.env` — still type-check here). Referenced by tsconfig.json
   // so `tsc -b` (pnpm build) type-checks tests too; test files are excluded from tsconfig.app.json
   // so no file is claimed by two projects.
   "compilerOptions": {
@@ -9,7 +10,7 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
-    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client"],
     "skipLibCheck": true,
 
     /* Bundler mode */

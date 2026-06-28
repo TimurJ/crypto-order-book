@@ -14,6 +14,8 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
 - **Tailwind CSS v4** for styling
 - **shadcn/ui** (`base-lyra` style — built on [Base UI](https://base-ui.com) primitives) with
   **Tabler** icons
+- **react-error-boundary** for a top-level error boundary + a central error-reporting seam (see
+  [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md))
 - **Biome** for linting & formatting
 - **Vitest** + **React Testing Library** (jsdom) for unit / component tests
 - **pnpm** for package management
