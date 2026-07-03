@@ -100,6 +100,9 @@ catches a broken deploy before it's discovered manually — PROD especially.
       `dependabot[bot]` (no Actions secrets on Dependabot runs)
 - [x] Add an `ignore` rule pinning **`@types/node` to its 24.x major** (semver-major suppressed) so the
       types track the enforced Node 24 runtime — prompted by Dependabot PR #13 (24 → 26); see item #10
+- [x] Resolve the sibling **`@cloudflare/workers-types` drift**: dropped the devDep and generate the Worker
+      types from `compatibility_date` (`cf-typegen` → committed `worker/worker-configuration.d.ts`, CI-guarded
+      by `cf-typegen:check`) — no ignore rule needed. See [`docs/cd-setup.md`](docs/cd-setup.md).
 - [ ] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
       (`gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts` + `…/automated-security-fixes`)
 

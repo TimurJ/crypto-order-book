@@ -22,7 +22,8 @@
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:uat": "wrangler deploy --env uat",
     "deploy:prod": "wrangler deploy --env prod",
-    "cf-typegen": "wrangler types",
+    "cf-typegen": "wrangler types worker/worker-configuration.d.ts --include-env false",
+    "cf-typegen:check": "wrangler types worker/worker-configuration.d.ts --include-env false --check",
     "prepare": "husky"
   },
   "dependencies": {
@@ -42,7 +43,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.1",
-    "@cloudflare/workers-types": "^4.20260626.1",
     "@commitlint/cli": "^21.1.0",
     "@commitlint/config-conventional": "^21.1.0",
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.2",

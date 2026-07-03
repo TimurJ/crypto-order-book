@@ -26,6 +26,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Worker types in sync (wrangler types)
+        # Fails if wrangler.jsonc (compatibility_date) or wrangler/workerd changed without regenerating
+        # worker/worker-configuration.d.ts. Runs before build — needs no build output (dist may be absent).
+        run: pnpm cf-typegen:check
       - name: Lint & format (Biome)
         run: pnpm biome ci # read-only; emits GitHub annotations
       - name: Typecheck & build

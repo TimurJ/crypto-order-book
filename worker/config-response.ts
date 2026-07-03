@@ -3,7 +3,7 @@
 // Extracted from index.ts so it can be unit-tested without importing index.ts — whose `Env`
 // interface references the Workers-only `Fetcher` type, which isn't in the test project's libs.
 // This module only uses the Web `Response`, so it type-checks under both the Worker project
-// (workers-types) and the test project (DOM lib).
+// (generated worker-configuration.d.ts) and the test project (DOM lib).
 //
 // `_headers` cannot set headers on this response (it's Worker-generated, not served by Static
 // Assets), so the one header that matters on a JS sub-resource — `nosniff` — is set here.

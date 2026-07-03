@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**/*.{ts,tsx}", "!dist"]
+    "includes": ["**/*.{ts,tsx}", "!dist", "!worker/worker-configuration.d.ts"]
   },
   "formatter": {
     "enabled": true,

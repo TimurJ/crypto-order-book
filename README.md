@@ -50,7 +50,8 @@ Then open the URL Vite prints (default http://localhost:5173).
 | `pnpm format` | Format with Biome (`--write`) |
 | `pnpm check` | Lint + format and apply safe fixes (`biome check --write`) |
 | `pnpm deploy:dev` / `:uat` / `:prod` | Deploy to a Cloudflare Workers environment (`wrangler deploy --env <name>`) |
-| `pnpm cf-typegen` | Generate Worker binding types from `wrangler.jsonc` (`wrangler types`) |
+| `pnpm cf-typegen` | Regenerate the committed `worker/worker-configuration.d.ts` (runtime types from `wrangler.jsonc`'s `compatibility_date`) |
+| `pnpm cf-typegen:check` | Fail if that generated file is stale vs `wrangler.jsonc` (used by CI) |
 
 ## Tooling
 

@@ -172,7 +172,9 @@ Two corollaries:
    `@types/node` (whose *major* equals the Node major). A stub versioned by **date** instead — e.g.
    `@cloudflare/workers-types` (`4.YYYYMMDD.x`, tracking `wrangler`'s `compatibility_date`) — couples on
    what Dependabot treats as a *minor*, so a major-ignore won't hold it; pin/ignore its minor or generate
-   the types (`wrangler types`) instead.
+   the types (`wrangler types`) instead. **This repo took the generate route** (see
+   [`cd-setup.md`](cd-setup.md)) — trade-off: a Dependabot `wrangler` bump can change the generated file,
+   so that PR's CI stays red until you regenerate + commit.
 2. **Make commit messages pass your commit linter.** If you enforce Conventional Commits as a *required*
    check, set a lowercase `prefix` (so Dependabot lowercases the verb) **and** relax
    `body-max-line-length`/`footer-max-line-length` (or ignore bot commits). Otherwise Dependabot PRs are
