@@ -30,6 +30,10 @@ pnpm dev
 
 Then open the URL Vite prints (default http://localhost:5173).
 
+> **Prerequisite: Node 24** (pinned in [`.nvmrc`](.nvmrc) — `nvm use`) and pnpm via the
+> `packageManager` field (Corepack). The Node version is **enforced** at `pnpm install`, not just
+> advised — see [Continuous integration](#continuous-integration) for how.
+
 ## Scripts
 
 | Command | Description |
@@ -103,7 +107,9 @@ server, so nothing broken lands even if a hook was bypassed or skipped. Four job
   `commit-msg` hook).
 
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
-`package.json`, so local, hooks, and CI all run the same versions.
+`package.json`, so local, hooks, and CI all run the same versions. The Node major is **enforced**, not
+just advised — an `engines.node: ">=24 <25"` gate (with `engineStrict: true` in `pnpm-workspace.yaml`)
+makes `pnpm install` hard-fail on Node 22/26, on every machine and in CI.
 
 `main` is **branch-protected**: changes land via PR, and the required CI checks must pass (with the
 branch up to date) before merging — enforced on admins too. Add the new **Test** check to the
@@ -118,7 +124,8 @@ For the full setup history, the decisions, and the gotchas, see [`docs/ci-setup.
 GitHub Actions current, configured in [`.github/dependabot.yml`](.github/dependabot.yml). It opens
 **weekly** PRs for two ecosystems — npm (pnpm) and github-actions — batching non-major updates into
 grouped PRs (separate production / development) while leaving majors as individual PRs for isolated
-review. New releases (npm packages **and** pinned actions) are held for a 7-day **cooldown** before bumping
+review — except **`@types/node`**, whose major is held to the Node 24 runtime (an `ignore` rule; minor/patch
+still flow). New releases (npm packages **and** pinned actions) are held for a 7-day **cooldown** before bumping
 (supply-chain hygiene); security updates bypass the cooldown and arrive immediately.
 
 Dependabot PRs run the full CI suite and must pass the same required checks as any other PR. Two

@@ -41,7 +41,7 @@ so nothing broken lands even when a hook was bypassed.
 | Decision | Choice | Why |
 |---|---|---|
 | Biome in CI | **`pnpm biome ci`** (the pinned devDep), not `biomejs/setup-biome` | Biome is pinned exact (2.5.1); using the project's own copy makes CI and local lint identical. `setup-biome@version: latest` would drift from the lockfile. (Same reasoning CD uses for `pnpm exec wrangler`.) See [`biome-setup.md`](biome-setup.md). |
-| Version sources | **Node via `.nvmrc`**, **pnpm via `packageManager`** | Single source of truth: setup-node reads `node-version-file: .nvmrc`; `pnpm/action-setup` reads the `packageManager` field. The workflow hardcodes **no** tool versions. |
+| Version sources | **Node via `.nvmrc`**, **pnpm via `packageManager`** | Single source of truth: setup-node reads `node-version-file: .nvmrc`; `pnpm/action-setup` reads the `packageManager` field. The workflow hardcodes **no** tool versions. `.nvmrc` *selects* the Node 24.x; an `engines.node: ">=24 <25"` gate (+ `engineStrict: true` in `pnpm-workspace.yaml`) *enforces* it — `pnpm install` fails on any other major, in CI and locally. |
 | Step order | **`pnpm/action-setup` *before* `actions/setup-node`** | setup-node's `cache: pnpm` needs the pnpm binary on PATH to resolve the store path. Reverse the order and caching fails. |
 | Job granularity | **One job per concern** (`verify` · `secrets` · `commits`) | Distinct PR checks = clean, independently-required branch-protection targets. Cost: a second `pnpm install` per extra install-needing job (accepted). |
 | Permissions | **Least privilege** — `contents: read` default | `commits` widens to add `pull-requests: read`; nothing gets write. |
@@ -59,8 +59,12 @@ Commit `cd2ff61` added three files (and one line to a fourth):
 - **`.github/workflows/ci.yml`** — the workflow. `on: push` (branches `[main]`) **+** `pull_request`;
   top-level `permissions: contents: read`; a `concurrency` group keyed on
   `github.head_ref || github.run_id` with `cancel-in-progress: true`; then the jobs (§3.1).
-- **`.nvmrc`** — `24`. The single source for the Node version (consumed by CI's `node-version-file`
-  and by `nvm use` locally).
+- **`.nvmrc`** — `24`. Selects *which* Node 24.x runs (consumed by CI's `node-version-file` and by
+  `nvm use` locally). It's advisory, so it's paired with an enforced gate: **`engines.node: ">=24 <25"`**
+  in `package.json` + **`engineStrict: true`** in `pnpm-workspace.yaml` fail `pnpm install` on any other
+  Node major. **Gotcha (verified empirically):** on pnpm 11 `engines` *alone* only warns (the docs'
+  "always fails" is wrong for this version); `engineStrict` is the switch, and it must live in
+  `pnpm-workspace.yaml` — pnpm 11 reads only auth/registry from `.npmrc`, so `engine-strict` there is a no-op.
 - **`package.json`** — added `"packageManager": "pnpm@11.9.0"`, the single source for the pnpm version
   (auto-detected by `pnpm/action-setup`, so the workflow names no pnpm version).
 
@@ -151,7 +155,9 @@ action versions to whatever the live marketplace shows.
 
 1. **Pin the toolchain once:** create `.nvmrc` (e.g. `24`) and set
    `"packageManager": "pnpm@<x.y.z>"` in `package.json`. The workflow will read both — never hardcode
-   versions in the YAML.
+   versions in the YAML. To *enforce* the Node major (not just advise it), add
+   `"engines": { "node": ">=24 <25" }` to `package.json` **and** `engineStrict: true` to
+   `pnpm-workspace.yaml` (on pnpm 11 `engines` alone only warns; `.npmrc` `engine-strict` is a no-op).
 2. **Create `.github/workflows/ci.yml`** with the shell:
    ```yaml
    name: CI
@@ -206,7 +212,9 @@ action versions to whatever the live marketplace shows.
 - **When it runs:** every pull request and every push to `main`. The `concurrency` group cancels a
   superseded run when you push again to the same PR/branch.
 - **Bumping versions:** change `.nvmrc` (Node) or the `packageManager` field (pnpm) — **not** the
-  workflow. CI picks them up automatically. Bump Biome by changing the pinned devDep; CI uses that copy.
+  workflow. CI picks them up automatically. **Bumping the Node major means changing `.nvmrc` *and*
+  `engines.node`** (the enforced gate) together — CI's `pnpm install` cross-checks them, so a mismatch
+  fails loudly. Bump Biome by changing the pinned devDep; CI uses that copy.
 - **Branch protection:** `main` is **Strict**-protected — PRs only, the required CI checks must pass
   with the branch up to date, enforced on admins too. When a new check (like *Test (Vitest)*) first
   runs on a PR, add it to the required set. The **CD** checks are intentionally *not* required (they
@@ -221,8 +229,8 @@ action versions to whatever the live marketplace shows.
 - **`test` job — DONE.** Landed with the Vitest harness; see [`docs/vitest-setup.md`](vitest-setup.md).
 - **Dependency automation** (Dependabot) + **SAST** (CodeQL) — fits the existing security posture;
   tracked in [`PRODUCTION-READINESS.md`](../PRODUCTION-READINESS.md) Tier 2.
-- **Node-version matrix** — single Node (`.nvmrc`) for now; a matrix would only matter once the app
-  must support multiple runtimes.
+- **Node-version matrix** — single Node (`.nvmrc`, enforced via `engines`) for now; a matrix would only
+  matter once the app must support multiple runtimes (which would mean widening/removing the `engines` gate).
 - **Caching beyond the pnpm store** — `tsc -b` build-info / Vite cache could be cached if CI time
   grows; unnecessary at this scale.
 - **Coverage upload** in CI — deferred with coverage thresholds; see `docs/vitest-setup.md` §8.

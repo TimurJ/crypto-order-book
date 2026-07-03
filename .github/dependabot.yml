@@ -19,6 +19,13 @@ updates:
     # App (not a library) with a committed lockfile + mixed exact/caret pins → bump the manifest
     # version explicitly instead of relying on `auto`. (Exact pins stay exact; carets stay carets.)
     versioning-strategy: "increase"
+    ignore:
+      # @types/node's MAJOR must track the Node RUNTIME major, which is locked to 24 (.nvmrc + the
+      # package.json `engines` gate). Jumping the types ahead of the runtime (e.g. v26 on Node 24)
+      # lets code typecheck against APIs the runtime lacks. Hold on 24.x; minor/patch still flow.
+      # Unblock this (and bump .nvmrc + `engines`) together when moving to the next Node LTS.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore" # → chore(deps): / chore(deps-dev):  (see load-bearing note above)
       include: "scope"
