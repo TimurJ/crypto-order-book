@@ -9,6 +9,14 @@ packages: []
 # pnpm 11 reads only auth/registry settings from `.npmrc`, so `engine-strict` there is a no-op.
 engineStrict: true
 
+# Let pnpm self-manage its version from package.json's `packageManager` field: when the running pnpm
+# differs from the pinned version, it downloads and runs it (verifying it's a signed release first).
+# Same guarantee Corepack gave, without depending on that experimental Node feature — so any global
+# pnpm (v11+) converges on the repo's version. `download` is pnpm 11's DEFAULT, pinned here for
+# explicitness and to survive a future default change. Replaces `managePackageManagerVersions: true`
+# (removed in pnpm 11). Lives here (not `.npmrc`) for the same reason as `engineStrict` above.
+pmOnFail: download
+
 allowBuilds:
   esbuild: true
   msw: false
