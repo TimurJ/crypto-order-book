@@ -51,9 +51,6 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.1
         version: 2.5.1
-      '@cloudflare/workers-types':
-        specifier: ^4.20260626.1
-        version: 4.20260626.1
       '@commitlint/cli':
         specifier: ^21.1.0
         version: 21.1.0(@types/node@24.13.2)(conventional-commits-parser@6.4.0)(typescript@6.0.3)
@@ -3612,7 +3609,8 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260625.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260626.1': {}
+  '@cloudflare/workers-types@4.20260626.1':
+    optional: true
 
   '@commitlint/cli@21.1.0(@types/node@24.13.2)(conventional-commits-parser@6.4.0)(typescript@6.0.3)':
     dependencies:

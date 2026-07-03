@@ -29,7 +29,8 @@ and Tabler icons). Package manager is **pnpm**.
 | `pnpm format` | `biome format --write` |
 | `pnpm check` | `biome check --write` (lint + format, applies safe fixes) |
 | `pnpm deploy:dev` / `:uat` / `:prod` | `wrangler deploy --env <name>` to a Cloudflare Workers env |
-| `pnpm cf-typegen` | `wrangler types` — regenerate Worker binding types from `wrangler.jsonc` |
+| `pnpm cf-typegen` | `wrangler types …` — regenerate the committed `worker/worker-configuration.d.ts` (runtime types from `compatibility_date`) |
+| `pnpm cf-typegen:check` | `wrangler types … --check` — fail if that file is stale vs `wrangler.jsonc` (CI gate) |
 
 ## Linting & formatting — Biome
 
@@ -261,7 +262,8 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,
   `erasableSyntaxOnly`, `noUnusedLocals`/`noUnusedParameters`. Build uses project references
   (`tsc -b` over `tsconfig.app.json` + `tsconfig.node.json` + `tsconfig.worker.json` — the last
-  type-checks `worker/` with `@cloudflare/workers-types`, isolated from the app's DOM lib). Target
+  type-checks `worker/` against the generated `worker/worker-configuration.d.ts`; `types: []` keeps the
+  worker project isolated from the app's DOM lib and every `@types/*`). Target
   es2023, `moduleResolution: "bundler"`. A 4th reference, `tsconfig.test.json`, type-checks test
   files with `vitest/globals` + jest-dom types — plus `vite/client`, so app modules a test imports can
   use `import.meta.env` (isolated from app/worker, like the worker project); see
@@ -281,6 +283,11 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   bundle (breaking build-once) or, for `public/config.js`, shadow the Worker's `/config.js` route.
   Env config is runtime-only via `/config.js`; the Worker uses `export default { fetch }` (a
   Worker requirement — exempt from the component-export rule since it's not a component).
+- **Worker types are *generated*, not a dependency.** `worker/worker-configuration.d.ts` is produced by
+  `pnpm cf-typegen` (`wrangler types … --include-env false`) from `wrangler.jsonc`'s `compatibility_date`
+  and **committed**. Regenerate + commit after changing `compatibility_date` or bumping `wrangler`/`workerd`;
+  CI's `cf-typegen:check` fails when it's stale. It's Biome-ignored (`!worker/worker-configuration.d.ts`)
+  — never hand-edit it. Why it replaced an `@cloudflare/workers-types` devDep: [`docs/cd-setup.md`](docs/cd-setup.md).
 - **Native build scripts are allow-listed in `pnpm-workspace.yaml` (`allowBuilds`).** pnpm 11
   blocks unapproved build scripts *and fails `pnpm <script>`* until each is resolved to `true`/
   `false` (never leave the `set this to true or false` placeholder). Current calls: `workerd: true`
