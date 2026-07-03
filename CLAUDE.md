@@ -300,5 +300,15 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   `pnpm-workspace.yaml`, not `.npmrc` (pnpm 11 reads only auth/registry from `.npmrc`). `.nvmrc` still
   selects *which* 24.x; bump both together at the next LTS. Pairs with the `@types/node` major-ignore
   (see Dependabot).
+- **pnpm self-manages its version — no Corepack.** `pmOnFail: download` in `pnpm-workspace.yaml` makes
+  pnpm read `package.json`'s `packageManager` field and download+run the pinned version (verifying
+  a signed release) when the local pnpm differs — so any global pnpm (v11+) converges on the repo's
+  version. It's pnpm 11's *default*, pinned explicitly (immune to a future default flip; self-documenting,
+  like `engineStrict`). **Gotcha:** `pmOnFail` supersedes **three** removed pnpm-11 settings —
+  `managePackageManagerVersions`, `packageManagerStrict`, and `packageManagerStrictVersion` — plus the
+  `COREPACK_ENABLE_STRICT` env var; don't reintroduce any of them. Its non-default values don't
+  download: `error` fails on a version mismatch, `warn` warns and continues, `ignore` skips the check.
+  CI is unaffected: `pnpm/action-setup` provisions pnpm from the same field, never Corepack.
+  **Bump pnpm** by editing the `packageManager` field.
 - **Keep docs in sync:** on any **major change** (tooling, architecture, a new subsystem,
   scripts/hooks), update **both `README.md` and `CLAUDE.md`** in the same change.

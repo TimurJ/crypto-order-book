@@ -30,9 +30,12 @@ pnpm dev
 
 Then open the URL Vite prints (default http://localhost:5173).
 
-> **Prerequisite: Node 24** (pinned in [`.nvmrc`](.nvmrc) — `nvm use`) and pnpm via the
-> `packageManager` field (Corepack). The Node version is **enforced** at `pnpm install`, not just
-> advised — see [Continuous integration](#continuous-integration) for how.
+> **Prerequisite: Node 24** (pinned in [`.nvmrc`](.nvmrc) — `nvm use`) and **pnpm** installed
+> globally (v11+ — e.g. `npm i -g pnpm` or the [standalone installer](https://pnpm.io/installation)).
+> pnpm pins *itself* to the version in `package.json`'s `packageManager` field via `pmOnFail: download`
+> (`pnpm-workspace.yaml`), so `pnpm install` always runs that exact version regardless of your global
+> version. The Node version is **enforced** at `pnpm install`, not just advised — see
+> [Continuous integration](#continuous-integration) for how.
 
 ## Scripts
 
