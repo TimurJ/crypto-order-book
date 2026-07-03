@@ -95,7 +95,7 @@ adversarial review — which flagged two real things to verify: that `vite.confi
 
 | Package | Version | Notes |
 |---|---|---|
-| `vitest` | `4.1.9` (exact) | peer `vite: ^6.0.0 \|\| ^7.0.0 \|\| ^8.0.0` → supports the repo's Vite 8; `engines.node ^20 \|\| ^22 \|\| >=24` (matches `.nvmrc` 24) |
+| `vitest` | `4.1.9` (exact) | peer `vite: ^6.0.0 \|\| ^7.0.0 \|\| ^8.0.0` → supports the repo's Vite 8; `engines.node ^20 \|\| ^22 \|\| >=24` — a superset of the repo's own `engines.node >=24 <25` lock, so `engineStrict` never trips on it |
 | `@vitest/coverage-v8` | `4.1.9` (exact) | must equal the `vitest` version |
 | `@vitest/ui` | `4.1.9` (exact) | must equal the `vitest` version |
 | `@testing-library/react` | `16.3.2` | peer `react ^18 \|\| ^19`; needs `@testing-library/dom ^10` as an explicit peer under pnpm |

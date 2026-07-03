@@ -33,6 +33,13 @@ full story.
   development) batch `minor`+`patch` into ≤2 PRs/week. **Majors are intentionally ungrouped** — each
   breaking change gets its own PR so it's reviewed and CI-tested in isolation. Actions are grouped into
   a single PR (`patterns: ["*"]` — low volume, low risk).
+- **One `ignore` rule: `@types/node` majors.** `@types/node`'s major must track the **Node runtime**
+  major (locked to 24 — `.nvmrc` + the `engines.node` gate in `package.json`; see
+  [`ci-setup.md`](ci-setup.md)). A v26 bump on Node 24 would let code typecheck against APIs the runtime
+  lacks — green CI, then a runtime crash. So `update-types: ["version-update:semver-major"]` is ignored
+  for `@types/node` **only**; 24.x minor/patch still flow (grouped as dev deps). A deliberate exception to
+  "individual majors" above — lift it (and bump `.nvmrc` + `engines`) together at the next Node LTS.
+  Prompted by Dependabot PR #13 (`@types/node` 24 → 26).
 - **`commit-message.prefix` is load-bearing** (see §4). `chore` for npm, `ci` for actions, both with
   `include: "scope"`.
 - **`versioning-strategy: increase`.** This is an **application** (`"private": true`, deployed SPA) with
@@ -49,6 +56,7 @@ full story.
 | File | Change |
 |---|---|
 | `.github/dependabot.yml` | **New.** The config above. |
+| `.github/dependabot.yml` (`ignore`) | **Added later.** `@types/node` semver-major ignored — pins the types to the enforced Node 24 runtime (§2). |
 | `package.json` (`commitlint` block) | Added `rules` disabling `body-max-line-length` + `footer-max-line-length` (§4.1). |
 | `.github/workflows/cd.yml` (`preview` job) | Added `github.actor != 'dependabot[bot]'` to the `if` (§4.2). |
 | `README.md` / `CLAUDE.md` / `PRODUCTION-READINESS.md` | Docs kept in sync; #6 checked off. |
@@ -159,7 +167,12 @@ Two corollaries:
 1. **Add `.github/dependabot.yml`** with `version: 2` and one `updates` entry per ecosystem. For a pnpm
    app: `package-ecosystem: "npm"`, `directory: "/"`, a weekly `schedule`, `versioning-strategy:
    "increase"`, `commit-message: { prefix, include: "scope" }`, prod/dev `groups` for non-majors, and an
-   npm `cooldown`. Add a second entry for `github-actions`.
+   npm `cooldown`. Add a second entry for `github-actions`. **If you pin a runtime, keep its type stub
+   from outrunning it — but the lever is per-runtime.** For Node it's a semver-major `ignore` on
+   `@types/node` (whose *major* equals the Node major). A stub versioned by **date** instead — e.g.
+   `@cloudflare/workers-types` (`4.YYYYMMDD.x`, tracking `wrangler`'s `compatibility_date`) — couples on
+   what Dependabot treats as a *minor*, so a major-ignore won't hold it; pin/ignore its minor or generate
+   the types (`wrangler types`) instead.
 2. **Make commit messages pass your commit linter.** If you enforce Conventional Commits as a *required*
    check, set a lowercase `prefix` (so Dependabot lowercases the verb) **and** relax
    `body-max-line-length`/`footer-max-line-length` (or ignore bot commits). Otherwise Dependabot PRs are

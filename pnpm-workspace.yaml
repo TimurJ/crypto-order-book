@@ -1,5 +1,14 @@
 packages: []
 
+# Hard-fail `pnpm install` when the running Node is outside package.json's `engines.node`
+# (locked to Node 24 — matches `.nvmrc`). GOTCHA: on pnpm 11 the `engines` field ALONE only
+# prints a warning (the docs claiming it "always fails" are wrong for this version); this switch
+# is what makes it an error (`ERR_PNPM_UNSUPPORTED_ENGINE`). Verified empirically. It also enforces
+# dependencies' own engine ranges — fine today (all deps allow Node 24), and a loud failure if a
+# future dep needs a Node we've locked out is the behaviour we want here. Lives here, not `.npmrc`:
+# pnpm 11 reads only auth/registry settings from `.npmrc`, so `engine-strict` there is a no-op.
+engineStrict: true
+
 allowBuilds:
   esbuild: true
   msw: false

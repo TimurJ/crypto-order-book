@@ -98,6 +98,8 @@ catches a broken deploy before it's discovered manually — PROD especially.
 - [x] Resolve the two gate collisions so Dependabot PRs stay green: relaxed commitlint
       `body-`/`footer-max-line-length` (required check) and guarded the CD `preview` job against
       `dependabot[bot]` (no Actions secrets on Dependabot runs)
+- [x] Add an `ignore` rule pinning **`@types/node` to its 24.x major** (semver-major suppressed) so the
+      types track the enforced Node 24 runtime — prompted by Dependabot PR #13 (24 → 26); see item #10
 - [ ] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
       (`gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts` + `…/automated-security-fixes`)
 
@@ -123,6 +125,16 @@ CI/security posture cleanly.
 - [ ] Add a `LICENSE`
 - [ ] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; helps editors with CSS/JSON/MD)
 - [ ] Consider a PR template / `CODEOWNERS` (low priority while solo)
+
+### 10. Runtime version lock (Node 24) ✅ DONE
+- [x] Enforce the Node major, not just advise it: `engines.node: ">=24 <25"` in `package.json` +
+      **`engineStrict: true`** in `pnpm-workspace.yaml` → `pnpm install` hard-fails on Node 22/26
+      (verified empirically; `engines` alone only warns on pnpm 11, and `.npmrc` `engine-strict` is a
+      no-op there). `.nvmrc` still selects which 24.x runs.
+- [x] Pairs with the `@types/node` major-ignore in Dependabot (#6) — the types track the locked runtime
+
+**Why:** `.nvmrc` was advisory (nvm-only); nothing stopped a contributor or CI from installing on a
+different Node major. For a financial-app posture, the runtime must not silently drift across machines.
 
 ---
 

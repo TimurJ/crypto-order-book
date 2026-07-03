@@ -128,6 +128,9 @@ Design decisions:
 - **Single source of truth for versions.** Node via `.nvmrc` (`24`), consumed by setup-node's
   `node-version-file` and by `nvm use`; pnpm via `package.json`'s `packageManager` field
   (`pnpm@11.9.0`), auto-detected by `pnpm/action-setup@v6` so the workflow hardcodes no pnpm version.
+  `.nvmrc` *selects* which Node 24.x runs; a separate **`engines`/`engineStrict` gate enforces** it
+  (`pnpm install` fails on any other major, so local/CI can't drift onto Node 22/26) — full mechanism
+  and the pnpm-11 gotcha in the Node-lock entry under Conventions.
 - **Action order matters:** `pnpm/action-setup` runs **before** `actions/setup-node`, because
   setup-node's `cache: pnpm` needs the pnpm binary to resolve the store path.
 - **Hygiene:** least-privilege `permissions: contents: read` (the `commits` job adds `pull-requests:
@@ -179,7 +182,8 @@ branch-protected (PR + the 3 CI checks, enforced on admins; CD checks not requir
 
 `.github/dependabot.yml` drives **weekly** dependency PRs for two ecosystems — **npm** (pnpm) and
 **github-actions**. Non-major updates are grouped (separate production/development PRs); majors come
-individually for isolated review. npm **and action** releases get a 7-day **cooldown** (supply-chain
+individually for isolated review (except **`@types/node`**, whose major is pinned to the Node runtime —
+see below). npm **and action** releases get a 7-day **cooldown** (supply-chain
 hygiene); security updates bypass it and arrive immediately. `versioning-strategy: increase` (this is an app).
 **Dependabot over Renovate:** native, zero-infra, matches the Actions-first posture.
 
@@ -194,7 +198,10 @@ Two integrations were required so Dependabot PRs stay green — both because of 
   secrets, so the token-dependent preview is guarded with `github.actor != 'dependabot[bot]'` (skips, not fails).
 
 `cooldown` covers **both** ecosystems via `default-days`; the `semver-*-days` keys are actions-unsupported
-(tags, not SemVer). Alerts/security updates are enabled in repo settings (separate from version updates).
+(tags, not SemVer). An **`ignore`** rule holds **`@types/node` on its 24.x major** (semver-major bumps
+suppressed) so the types can't outrun the pinned Node 24 runtime — minor/patch still flow; lift it (with
+`.nvmrc` + `engines`) at the next Node LTS. Alerts/security updates are enabled in repo settings (separate
+from version updates).
 **Full rationale, gotchas & from-scratch recipe:** [`docs/dependabot-setup.md`](docs/dependabot-setup.md).
 
 ## Secrets
@@ -279,5 +286,12 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   `false` (never leave the `set this to true or false` placeholder). Current calls: `workerd: true`
   (Cloudflare runtime for local `wrangler dev`), `sharp: false` (transitive via miniflare for image
   emulation we don't use).
+- **Node is locked to major 24 and *enforced*.** `engines.node: ">=24 <25"` in `package.json` +
+  **`engineStrict: true`** in `pnpm-workspace.yaml` make `pnpm install` hard-fail on any other Node
+  major. **Gotcha:** on pnpm 11 the `engines` field **alone only warns** (the docs' "always fails" is
+  wrong for this version) — `engineStrict` is the switch that makes it an error, and it must live in
+  `pnpm-workspace.yaml`, not `.npmrc` (pnpm 11 reads only auth/registry from `.npmrc`). `.nvmrc` still
+  selects *which* 24.x; bump both together at the next LTS. Pairs with the `@types/node` major-ignore
+  (see Dependabot).
 - **Keep docs in sync:** on any **major change** (tooling, architecture, a new subsystem,
   scripts/hooks), update **both `README.md` and `CLAUDE.md`** in the same change.
