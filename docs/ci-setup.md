@@ -13,7 +13,9 @@ footguns it sidesteps, and a from-scratch recipe to reproduce it on the next pro
 >
 > **Scope:** this doc covers the CI workflow as it was first built — the three jobs `verify`, `secrets`,
 > `commits`. A fourth job, **`test` (Vitest)**, was added later when the test harness landed; it is
-> documented in [`docs/vitest-setup.md`](vitest-setup.md) and only cross-referenced here. The local
+> documented in [`docs/vitest-setup.md`](vitest-setup.md) and only cross-referenced here. A fifth job,
+> **`shell` (Shell lint)**, was also added later and — unlike `test` — is documented inline below (§3.1).
+> The local
 > **Husky hooks** that CI mirrors have their own chronicle — see [`docs/husky-setup.md`](husky-setup.md).
 
 ---
@@ -83,9 +85,19 @@ It **relies on** config that already existed:
 | `secrets` | **Secret scan (gitleaks)** | PR + push to `main` | checkout with `fetch-depth: 0` (full history) → `gitleaks/gitleaks-action@v3` with `GITHUB_TOKEN`. A deep backstop to the staged-file secretlint hook. |
 | `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action@v6`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
 | `test` | **Test (Vitest)** | PR + push to `main` | *Added later with the test harness — see [`docs/vitest-setup.md`](vitest-setup.md). Same setup block as `verify`, runs `pnpm test:run`.* |
+| `shell` | **Shell lint (shellcheck)** | PR + push to `main` | *Added later.* Checkout-only (no pnpm/node) → `bash -n` + `shellcheck` on `scripts/*.sh`, and `shellcheck --shell=sh` on the Husky hooks. Guards the release script's portability (GNU ↔ BSD) and syntax — nothing else lints shell (Biome is ts/tsx-only). |
 
-`verify` and `test` are the only jobs that install dependencies; `secrets` and `commits` need only a
-checkout. Only `commits` is PR-gated (on a push to `main` there is no PR commit range to lint — see §4).
+`verify` and `test` are the only jobs that install dependencies; `secrets`, `commits`, and `shell`
+need only a checkout. Only `commits` is PR-gated (on a push to `main` there is no PR commit range to lint — see §4).
+
+Shell-job specifics worth remembering: `shellcheck` **and** `bash` are preinstalled on
+`ubuntu-latest`, so the job needs no marketplace action or `apt-get` (nothing to pin — the sole
+`uses:` is `actions/checkout`). Two footguns it sidesteps: `bash -n` only syntax-checks its **first**
+argument (the rest become positional params), so the syntax step **loops** over `scripts/*.sh` rather
+than passing the glob directly; and the Husky hooks are shebang-less and run under `/bin/sh` (dash on
+Linux), so they're linted with `--shell=sh`, not as bash. Those hooks are discovered with
+`git ls-files '.husky/*'` (not a glob) so a newly added hook can't slip past unlinted — and it skips
+the gitignored `.husky/_/` stubs that a plain glob would wrongly hand to shellcheck.
 
 ### 3.2 Action versions (verified live 2026-06-27)
 
