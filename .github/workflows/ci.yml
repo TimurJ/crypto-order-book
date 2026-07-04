@@ -49,6 +49,25 @@ jobs:
       - name: Run tests
         run: pnpm test:run # vitest run (one-shot; CI is auto-detected too)
 
+  # Lint the repo's shell — the release helper (scripts/*.sh) and the Husky hooks. Nothing else gates
+  # shell (Biome is ts/tsx-only; the pre-push hook runs build+test, not the scripts), so a portability
+  # slip (a GNU-ism that breaks on macOS, or a bashism that breaks dash on WSL) or a syntax error in the
+  # PROD-cutting release script could otherwise merge unnoticed. Checkout-only: shellcheck + bash are
+  # preinstalled on ubuntu-latest, so no pnpm/node setup is needed.
+  shell:
+    name: Shell lint (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Syntax check (bash -n only checks its first arg, so loop)
+        run: for f in scripts/*.sh; do bash -n "$f"; done
+      - name: ShellCheck (bash scripts)
+        run: shellcheck scripts/*.sh
+      # git ls-files (not a shell glob) lists tracked hooks and skips the gitignored _/ stubs, so a
+      # new hook can't slip past unlinted. Hooks are shebang-less and run under /bin/sh (dash on Linux).
+      - name: ShellCheck (Husky hooks, POSIX sh)
+        run: git ls-files '.husky/*' | xargs -r shellcheck --shell=sh
+
   secrets:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

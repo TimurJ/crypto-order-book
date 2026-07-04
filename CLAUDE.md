@@ -110,7 +110,7 @@ it updated when the setup itself changes).
 
 CI lives in `.github/workflows/ci.yml` and runs on **pull requests** and **pushes to `main`**. It is
 the *authoritative* gate — it re-runs the local hooks' checks on the server, so bypassed/skipped hooks
-(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Four parallel
+(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Five parallel
 jobs, each a distinct PR check (clean targets for branch protection):
 
 - **`verify`** — `pnpm install --frozen-lockfile`, then `pnpm biome ci` (read-only lint + format,
@@ -123,6 +123,9 @@ jobs, each a distinct PR check (clean targets for branch protection):
   needs a free `GITLEAKS_LICENSE` secret.
 - **`commits`** — `wagoid/commitlint-github-action@v6`, PR-only; reads the same `commitlint` config
   from `package.json`. Backstop to the local `commit-msg` hook (catches `--no-verify` / web-UI commits).
+- **`shell`** — `shellcheck` + `bash -n` on `scripts/*.sh`, plus `shellcheck --shell=sh` on the Husky
+  hooks. Guards the PROD-cutting release helper's cross-platform portability (GNU on WSL ↔ BSD on
+  macOS) and syntax — nothing else lints shell (Biome is ts/tsx-only).
 
 Design decisions:
 
@@ -142,6 +145,11 @@ Design decisions:
 - **`test` is its own job, not folded into `verify`** — keeps one clean PR check per concern
   (distinct branch-protection targets) at the cost of a second `pnpm install`. After it runs once on
   a PR, add it to `main`'s required checks.
+- **`shell` is checkout-only** — `shellcheck` and `bash` ship preinstalled on `ubuntu-latest`, so it
+  needs no pnpm/node setup and no marketplace action (its only `uses:` is `checkout`, nothing extra to
+  pin). Gotchas it encodes: `bash -n` checks only its *first* argument, so the syntax step **loops**
+  over `scripts/*.sh`; and the shebang-less Husky hooks run under `/bin/sh` (dash on Linux), so
+  they're linted with `--shell=sh`. Like `test`, add it to `main`'s required checks after its first PR run.
 
 **Full setup, gotchas, and a from-scratch recipe:** [`docs/ci-setup.md`](docs/ci-setup.md) (keep it
 updated when the setup itself changes).

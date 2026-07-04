@@ -55,7 +55,10 @@ git fetch --tags --quiet origin ||
   }
 
 # --- Compute the next version off the latest RELEASE tag (vX.Y.Z, no -rc). -------------
-latest=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+# `sort -t. -k1.2,1n` skips the leading 'v' so field 1 sorts numerically — portable across GNU
+# (Linux) and BSD (macOS) sort; `sort -V` is GNU-only and fails silently on a stock Mac.
+latest=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+  | sort -t. -k1.2,1n -k2,2n -k3,3n | tail -1 || true)
 latest=${latest:-v0.0.0}
 IFS=. read -r cur_major cur_minor cur_patch <<<"${latest#v}"
 cur_major=$((10#$cur_major)) cur_minor=$((10#$cur_minor)) cur_patch=$((10#$cur_patch))
