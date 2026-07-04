@@ -228,7 +228,7 @@ action versions to whatever the live marketplace shows.
 
 - **`test` job — DONE.** Landed with the Vitest harness; see [`docs/vitest-setup.md`](vitest-setup.md).
 - **Dependency automation** (Dependabot) + **SAST** (CodeQL) — fits the existing security posture;
-  tracked in [`PRODUCTION-READINESS.md`](../PRODUCTION-READINESS.md) Tier 2.
+  tracked in [`production-readiness.md`](production-readiness.md) Tier 2.
 - **Node-version matrix** — single Node (`.nvmrc`, enforced via `engines`) for now; a matrix would only
   matter once the app must support multiple runtimes (which would mean widening/removing the `engines` gate).
 - **Caching beyond the pnpm store** — `tsc -b` build-info / Vite cache could be cached if CI time

@@ -1,5 +1,5 @@
 <!--
-Keep PR bodies light — PRODUCTION-READINESS.md, docs/*-setup.md, and the Conventional-Commit
+Keep PR bodies light — docs/production-readiness.md, docs/*-setup.md, and the Conventional-Commit
 messages carry the detail. Delete anything that doesn't apply; the summary is optional.
 -->
 
