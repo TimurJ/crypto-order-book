@@ -47,10 +47,10 @@ so nothing broken lands even when a hook was bypassed.
 | Step order | **`pnpm/action-setup` *before* `actions/setup-node`** | setup-node's `cache: pnpm` needs the pnpm binary on PATH to resolve the store path. Reverse the order and caching fails. |
 | Job granularity | **One job per concern** (`verify` · `secrets` · `commits`) | Distinct PR checks = clean, independently-required branch-protection targets. Cost: a second `pnpm install` per extra install-needing job (accepted). |
 | Permissions | **Least privilege** — `contents: read` default | `commits` widens to add `pull-requests: read`; nothing gets write. |
-| Run hygiene | **`concurrency` group + `cancel-in-progress`** | Superseded runs on the same PR/branch are cancelled, saving minutes. Actions pinned to **major tags** (verified live). |
+| Run hygiene | **`concurrency` group + `cancel-in-progress`** | Superseded runs on the same PR/branch are cancelled, saving minutes. Every action is pinned to a **full commit SHA** (§3.2). |
 
 These were settled before the workflow was written and verified against the live action registry on
-2026-06-27 (see §3.2).
+2026-06-27; the actions were later SHA-pinned (§3.2).
 
 ---
 
@@ -82,8 +82,8 @@ It **relies on** config that already existed:
 | Job | Name (PR check) | Trigger | What it does |
 |---|---|---|---|
 | `verify` | **Lint, typecheck & build** | PR + push to `main` | `pnpm install --frozen-lockfile` → `pnpm biome ci` (read-only lint + format, emits GitHub annotations) → `pnpm build` (`tsc -b && vite build`). Mirrors the pre-commit Biome hook + the pre-push build. |
-| `secrets` | **Secret scan (gitleaks)** | PR + push to `main` | checkout with `fetch-depth: 0` (full history) → `gitleaks/gitleaks-action@v3` with `GITHUB_TOKEN`. A deep backstop to the staged-file secretlint hook. |
-| `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action@v6`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
+| `secrets` | **Secret scan (gitleaks)** | PR + push to `main` | checkout with `fetch-depth: 0` (full history) → `gitleaks/gitleaks-action` with `GITHUB_TOKEN`. A deep backstop to the staged-file secretlint hook. |
+| `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
 | `test` | **Test (Vitest)** | PR + push to `main` | *Added later with the test harness — see [`docs/vitest-setup.md`](vitest-setup.md). Same setup block as `verify`, runs `pnpm test:run`.* |
 | `shell` | **Shell lint (shellcheck)** | PR + push to `main` | *Added later.* Checkout-only (no pnpm/node) → `bash -n` + `shellcheck` on `scripts/*.sh`, and `shellcheck --shell=sh` on the Husky hooks. Guards the release script's portability (GNU ↔ BSD) and syntax — nothing else lints shell (Biome is ts/tsx-only). |
 
@@ -99,18 +99,28 @@ Linux), so they're linted with `--shell=sh`, not as bash. Those hooks are discov
 `git ls-files '.husky/*'` (not a glob) so a newly added hook can't slip past unlinted — and it skips
 the gitignored `.husky/_/` stubs that a plain glob would wrongly hand to shellcheck.
 
-### 3.2 Action versions (verified live 2026-06-27)
+### 3.2 Action pins
 
-| Action | Pin | Role |
-|---|---|---|
-| `actions/checkout` | `@v7` | Clone the repo (`fetch-depth: 0` where full history is needed) |
-| `pnpm/action-setup` | `@v6` | Install pnpm from the `packageManager` field — **runs first** |
-| `actions/setup-node` | `@v6` | Install Node from `.nvmrc`; `cache: pnpm` |
-| `gitleaks/gitleaks-action` | `@v3` | Full-history secret scan |
-| `wagoid/commitlint-github-action` | `@v6` | Conventional-Commits check on PR commits |
+Every `uses:` is pinned to a **full commit SHA** with the release version in a trailing comment
+(`actions/checkout@<sha> # v7.0.0`) — GitHub's only way to reference an action as an immutable release.
+It matters most in CD, where actions run with the Cloudflare API token: a retagged or compromised
+`@v3` would otherwise execute with that credential. **The workflow file is the source of truth for the
+exact SHA** — this table intentionally doesn't duplicate the 40-char values (they'd go stale on the
+first bump).
 
-Pinned to **major tags** so patch/minor fixes flow in without churn; re-verify against the live
-marketplace before reusing on a new project (don't trust a stale blog).
+| Action | Role |
+|---|---|
+| `actions/checkout` | Clone the repo (`fetch-depth: 0` where full history is needed) |
+| `pnpm/action-setup` | Install pnpm from the `packageManager` field — **runs first** |
+| `actions/setup-node` | Install Node from `.nvmrc`; `cache: pnpm` |
+| `gitleaks/gitleaks-action` | Full-history secret scan |
+| `wagoid/commitlint-github-action` | Conventional-Commits check on PR commits |
+
+Dependabot's `github-actions` ecosystem keeps them current — on a bump it rewrites **both** the SHA
+and the `# vX.Y.Z` comment (grouped weekly, 7-day cooldown). **Caveat:** Dependabot *security alerts*
+only fire for semver-pinned actions, so a SHA pin forgoes the alert — the weekly version-update PRs
+(plus gitleaks + cooldown) are what keep us covered. To pin or re-resolve a SHA, read it from the
+upstream ref: `gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`.
 
 ---
 
@@ -195,6 +205,7 @@ action versions to whatever the live marketplace shows.
    - run: pnpm biome ci                 # read-only lint + format
    - run: pnpm build                    # tsc -b && vite build
    ```
+   *(Snippets here show `@vN` tags for readability; pin each action to a full commit SHA per step 7.)*
 4. **`secrets` job** — `actions/checkout@v7` with `fetch-depth: 0`, then
    `gitleaks/gitleaks-action@v3` with `env: GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`. Under a GitHub
    org, also add a `GITLEAKS_LICENSE` secret.
@@ -202,7 +213,9 @@ action versions to whatever the live marketplace shows.
    pull-requests: read }`, checkout `fetch-depth: 0`, then `wagoid/commitlint-github-action@v6`.
 6. **If the project has tests**, add a `test` job mirroring `verify`'s setup block and running your
    one-shot test command (here `pnpm test:run`) — see [`docs/vitest-setup.md`](vitest-setup.md).
-7. **Verify every action's version** against the live marketplace before pinning (major tags).
+7. **Pin every action to a full commit SHA** (`@<sha> # vX.Y.Z`) — resolve each from the upstream
+   ref (`gh api repos/<owner>/<repo>/commits/<tag> --jq .sha`), not a stale blog. Dependabot rewrites
+   the SHA + comment on later bumps.
 8. **Open a PR.** Once each job has run there at least once, add the checks to `main`'s required
    branch-protection set (§7).
 

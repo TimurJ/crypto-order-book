@@ -113,6 +113,9 @@ server, so nothing broken lands even if a hook was bypassed or skipped. Five job
 - **Shell lint** — [shellcheck](https://www.shellcheck.net) + `bash -n` on `scripts/*.sh`, plus
   `shellcheck` (as POSIX `sh`) on the Husky hooks, so the release helper stays portable across WSL and macOS.
 
+Every action the two workflows call is pinned to a **full commit SHA** (`@<sha> # vX.Y.Z`), so a
+retagged action can't change what runs — Dependabot bumps the SHA and its comment on its weekly run.
+
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
 `package.json`, so local, hooks, and CI all run the same versions. The Node major is **enforced**, not
 just advised — an `engines.node: ">=24 <25"` gate (with `engineStrict: true` in `pnpm-workspace.yaml`)

@@ -6,7 +6,8 @@ and [`cd-setup.md`](cd-setup.md). README has the how-to; CLAUDE.md has the short
 full story.
 
 > Config lives in [`.github/dependabot.yml`](../.github/dependabot.yml). Two ecosystems: **npm** (the
-> pnpm app deps) and **github-actions** (the actions pinned in `ci.yml` / `cd.yml`).
+> pnpm app deps) and **github-actions** (the SHA-pinned actions in `ci.yml` / `cd.yml` — on a bump
+> Dependabot rewrites both the commit SHA and its `# vX.Y.Z` comment).
 
 ---
 
