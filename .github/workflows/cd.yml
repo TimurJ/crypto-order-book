@@ -199,16 +199,13 @@ jobs:
           echo "id=$ID" >> "$GITHUB_OUTPUT"
           echo "url=$URL" >> "$GITHUB_OUTPUT"
       # Gate: smoke the version's preview URL (serves no traffic) BEFORE promoting, so a broken build
-      # fails here and never reaches users. Checks the SPA document AND /config.js (the Worker-generated
-      # route — a different code path than static assets). --retry-all-errors absorbs edge propagation.
+      # fails here and never reaches users. scripts/smoke.sh goes past a 200 — it asserts the
+      # public/_headers security headers + the SPA shell marker on the document, and nosniff + the right
+      # "env" in the Worker-generated /config.js. The same script runs again post-promote (Confirm live).
       - name: Smoke test (preview URL)
         env:
           BASE: ${{ steps.upload.outputs.url }}
-        run: |
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Preview smoke OK: $BASE"
+        run: bash scripts/smoke.sh "$BASE" dev
       # Promote the smoked version to 100% traffic. Explicit `<id>@100` + `--yes` (versions deploy is
       # interactive by default).
       - name: Promote to 100%
@@ -217,14 +214,10 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           VERSION_ID: ${{ steps.upload.outputs.id }}
         run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env dev --yes
-      # Confirm the live edge now serves the promoted version (real URL / routing a preview URL can't show).
+      # Confirm the live edge now serves the promoted version (real URL / routing a preview URL can't
+      # show) — same deepened assertions as the preview smoke, against the live env.
       - name: Confirm live
-        run: |
-          BASE="https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Live OK: $BASE"
+        run: bash scripts/smoke.sh "https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev" dev
 
   # UAT: triggered by an rc tag. Promotes the artifact the main build produced for this SHA.
   deploy-uat:
@@ -287,11 +280,7 @@ jobs:
       - name: Smoke test (preview URL)
         env:
           BASE: ${{ steps.upload.outputs.url }}
-        run: |
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Preview smoke OK: $BASE"
+        run: bash scripts/smoke.sh "$BASE" uat
       - name: Promote to 100%
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -299,12 +288,7 @@ jobs:
           VERSION_ID: ${{ steps.upload.outputs.id }}
         run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env uat --yes
       - name: Confirm live
-        run: |
-          BASE="https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Live OK: $BASE"
+        run: bash scripts/smoke.sh "https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev" uat
 
   # PROD: triggered by a release tag. Same cross-run artifact; gated on the prod Environment's
   # required reviewer (approval precedes upload/smoke/promote). Traffic is gated behind the smoke —
@@ -370,11 +354,7 @@ jobs:
       - name: Smoke test (preview URL)
         env:
           BASE: ${{ steps.upload.outputs.url }}
-        run: |
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Preview smoke OK: $BASE"
+        run: bash scripts/smoke.sh "$BASE" prod
       - name: Promote to 100%
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -382,9 +362,4 @@ jobs:
           VERSION_ID: ${{ steps.upload.outputs.id }}
         run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env prod --yes
       - name: Confirm live
-        run: |
-          BASE="https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
-          for path in "/" "/config.js"; do
-            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
-          done
-          echo "Live OK: $BASE"
+        run: bash scripts/smoke.sh "https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev" prod

@@ -169,10 +169,12 @@ posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → 
 PROD, gated on the prod GitHub Environment's required reviewer.
 
 Each deploy job gates traffic **behind** the smoke test: `wrangler versions upload` stages a new
-version (routing no traffic), `curl --fail` on `/` and `/config.js` smoke-tests that version's
-**preview URL**, then `wrangler versions deploy <id>@100 --yes` promotes it and a final `curl`
-confirms the live URL — so a build that fails the smoke is never promoted (build-once preserved: upload uses the
-downloaded artifact, no rebuild). Rollback stays manual (`wrangler rollback`).
+version (routing no traffic), `scripts/smoke.sh` asserts that version's **preview URL** serves the
+security headers + SPA shell marker on `/` and `nosniff` + the right `env` in `/config.js` (not just a
+`200`), then `wrangler versions deploy <id>@100 --yes` promotes it and the same script re-checks the
+live URL — so a build that fails the smoke is never promoted (build-once preserved: upload uses the
+downloaded artifact, no rebuild). `scripts/smoke.sh` is shared by both checks and lint-covered by CI's
+`shell` job. Rollback stays manual (`wrangler rollback`).
 **Workers Logs** are on via top-level `"observability": { "enabled": true }` in `wrangler.jsonc`
 (logs are off by default; `observability` is inheritable, so the one block covers all three envs).
 
