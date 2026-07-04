@@ -108,15 +108,21 @@ Tag deploys never rebuild — they resolve the main-build run for the tag's SHA
 `actions/download-artifact` it cross-run. Only `deploy-dev` shares a run with `build`.
 
 **Pre-promote smoke (traffic gated behind it):** instead of an instant `wrangler deploy`, each deploy
-job **uploads a new version** (`wrangler versions upload`, which routes *no* traffic), `curl --fail`s
-that version's **preview URL** for `/` **and** `/config.js`, and only then **promotes** it to 100%
+job **uploads a new version** (`wrangler versions upload`, which routes *no* traffic), runs
+`scripts/smoke.sh` against that version's **preview URL**, and only then **promotes** it to 100%
 (`wrangler versions deploy <id>@100 --yes`). A build that fails the smoke is never promoted — the
-previous version keeps serving, so it never reaches users. (The smoke asserts the build *serves* —
-`/` and `/config.js` return OK — not that the app *behaves*; content/behaviour assertions are a later
-step, item #4.) A final `curl` against the live URL confirms the cutover. `--retry 3 --retry-delay 3
---retry-all-errors` absorbs the few-second
-edge propagation; `/config.js` is checked separately because it's the Worker-generated route (a
-different code path than the static assets); no secrets needed (public URLs).
+previous version keeps serving. The smoke goes past a `200`: on the document (`/`) it asserts the
+`public/_headers` security headers (CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, HSTS) and a stable SPA shell marker (`<title>Crypto Order Book</title>`), and on
+the Worker-generated `/config.js` (a different code path than the static assets) it asserts `nosniff`
+and `"env":"<env>"` — proving the *right* environment's config is live. It does **not** echo the exact
+Cloudflare version id from the response (that would need a `version_metadata` binding — a possible
+future enhancement, e.g. a Sentry release tag); but the pre-promote smoke targets the
+*version-specific* preview URL (whose hostname *is* the uploaded version id), so it's inherently
+version-targeted. A final run of the same script against the live URL confirms the cutover.
+`--retry 3 --retry-delay 3 --retry-all-errors` absorbs the few-second edge propagation; no secrets
+needed (public URLs). One script, six call sites (preview + live × three envs), auto-linted by CI's
+`shell` job (`scripts/*.sh`).
 
 This placement was the point of the change. The earlier smoke ran *after* `wrangler deploy` — not a
 deliberate "test after live is fine" call, but the only option that primitive allowed (an instant

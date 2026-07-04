@@ -222,10 +222,11 @@ commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
 - **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
   `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job.
 - **Traffic gated behind the smoke test** — each deploy `wrangler versions upload`s a new version
-  (serving no traffic), `curl --fail`s that version's **preview URL** for `/` and `/config.js`, and
-  only then promotes it to 100% (`wrangler versions deploy <id>@100 --yes`) — so a build that **fails
-  the smoke** is never promoted and the previous version keeps serving. A final check hits the live URL
-  to confirm the cutover.
+  (serving no traffic), runs [`scripts/smoke.sh`](scripts/smoke.sh) against that version's **preview
+  URL** — asserting the security headers + SPA shell marker on `/` and `nosniff` + the right `env` in
+  `/config.js`, not just a `200` — and only then promotes it to 100% (`wrangler versions deploy
+  <id>@100 --yes`), so a build that **fails the smoke** is never promoted and the previous version
+  keeps serving. The same script re-checks the live URL to confirm the cutover.
 - **Workers Logs on** — `observability` is enabled in [`wrangler.jsonc`](wrangler.jsonc) (off by
   default), so logs and uncaught exceptions are captured for every env.
 
