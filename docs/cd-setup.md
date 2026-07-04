@@ -42,11 +42,13 @@ now, and to be the skeleton a Node/Python backend slots into later.
 | UAT trigger | **Tag `vX.Y.Z-rc.N`** (trunk-based) | No long-lived release branches; semver-aligned |
 | Deploy tokens | **One per GitHub Environment** | Independently revocable; prod token only exposed to the gated prod job |
 | Wrangler in CI | **`pnpm exec wrangler`** (pinned dep) | Mirrors `pnpm biome ci` over `setup-biome` — no version drift vs the lockfile |
+| Deploy model | **Upload → smoke preview URL → promote to 100%** | Traffic is gated *behind* the smoke — a build that fails the smoke isn't promoted, so it serves no traffic (the live version keeps serving); replaces instant `wrangler deploy`. See §3.1. |
 | Action pins | **Full commit SHA** (`@<sha> # vX.Y.Z`) | Immutable ref — a retagged/compromised action can't change what runs **with the deploy token**; Dependabot bumps the SHA + comment. See [`ci-setup.md`](ci-setup.md) §3.2. |
 
 These forks were settled by discussion before any code, then stress-tested by feeding the plan
-through a second reviewer twice (which caught two real bugs — see §4). The **Action pins** row came
-later — a post-launch supply-chain hardening step, outside that original review.
+through a second reviewer twice (which caught two real bugs — see §4). The **Action pins** and
+**Deploy model** rows came later — post-launch hardening steps (supply-chain and traffic-gating,
+respectively), outside that original review.
 
 ---
 
@@ -96,20 +98,31 @@ later — a post-launch supply-chain hardening step, outside that original revie
 | `classify` | tag push | regex the tag → `channel` (`prod` `vX.Y.Z` / `uat` `…-rc.N` / `none`), and **reject a non-increasing version** vs the latest release tag |
 | `build` | **push to `main` only** | `pnpm build` → upload artifact `dist-<sha>` (90-day retention) |
 | `preview` | PR (same-repo) | `wrangler versions upload --env dev` → comment the preview URL |
-| `deploy-dev` | push to `main` | download same-run artifact → `wrangler deploy --env dev` → **smoke test** |
-| `deploy-uat` | `needs: classify`, channel `uat` | cross-run download `dist-<sha>` → `wrangler deploy --env uat` → **smoke test** |
-| `deploy-prod` | `needs: classify`, channel `prod` | gated on prod reviewer → cross-run download → `wrangler deploy --env prod` → **smoke test** |
+| `deploy-dev` | push to `main` | download same-run artifact → `versions upload` → **smoke the preview URL** → `versions deploy @100` → confirm live |
+| `deploy-uat` | `needs: classify`, channel `uat` | cross-run download `dist-<sha>` → `versions upload` → **smoke preview** → `versions deploy @100` → confirm live |
+| `deploy-prod` | `needs: classify`, channel `prod` | gated on prod reviewer → cross-run download → `versions upload` → **smoke preview** → `versions deploy @100` → confirm live |
 
 **Build-once linchpin:** `build` runs *only* on the `main` merge, producing exactly one `dist-<sha>`.
 Tag deploys never rebuild — they resolve the main-build run for the tag's SHA
 (`gh run list --workflow cd.yml --commit <sha> --branch main`, fail loudly on ≠1 match) and
 `actions/download-artifact` it cross-run. Only `deploy-dev` shares a run with `build`.
 
-**Post-deploy smoke test:** each deploy job, right after `wrangler deploy`, `curl --fail`s the env's
-`/` **and** `/config.js` (`--retry 3 --retry-delay 3 --retry-all-errors` absorbs the few-second edge
-propagation). A broken deploy now fails the job loudly instead of being noticed by hand — this
-automates the manual check in §6 step 2. `/config.js` is checked separately because it's the
-Worker-generated route (a different code path than the static assets). No secrets needed (public URL).
+**Pre-promote smoke (traffic gated behind it):** instead of an instant `wrangler deploy`, each deploy
+job **uploads a new version** (`wrangler versions upload`, which routes *no* traffic), `curl --fail`s
+that version's **preview URL** for `/` **and** `/config.js`, and only then **promotes** it to 100%
+(`wrangler versions deploy <id>@100 --yes`). A build that fails the smoke is never promoted — the
+previous version keeps serving, so it never reaches users. (The smoke asserts the build *serves* —
+`/` and `/config.js` return OK — not that the app *behaves*; content/behaviour assertions are a later
+step, item #4.) A final `curl` against the live URL confirms the cutover. `--retry 3 --retry-delay 3
+--retry-all-errors` absorbs the few-second
+edge propagation; `/config.js` is checked separately because it's the Worker-generated route (a
+different code path than the static assets); no secrets needed (public URLs).
+
+This placement was the point of the change. The earlier smoke ran *after* `wrangler deploy` — not a
+deliberate "test after live is fine" call, but the only option that primitive allowed (an instant
+cutover has no staged, not-yet-live state to test). The upload-then-promote flow (once deferred in §8
+as brittle) gives us that staged state, so the smoke now gates traffic rather than merely reporting on
+it. It still automates the manual check in §6 step 2, now *before* users are exposed.
 
 **Inert until configured:** deploy/preview jobs gate on `vars.CLOUDFLARE_ACCOUNT_ID != ''`, so the
 workflow no-ops (green, no red X) until credentials exist — the smoke test rides inside those guarded
@@ -167,6 +180,22 @@ The brittle part. Each is symptom → cause → fix.
    deploy exists), so the plan was to seed via the `main`→DEV deploy first. In practice the PR
    preview ran fine, so it was a non-issue — but the "merge to main first" ordering is still the
    clean bootstrap.
+
+9. **Wiring `versions upload` + `versions deploy` in CI has four sharp edges** (from moving the deploy
+   jobs to the pre-promote gate, §3.1):
+   - `versions deploy` is **interactive by default** — CI must pass `--yes` *and* an explicit
+     `<version-id>@100` spec (a bare invocation prompts for versions/percentages).
+   - **Capture the version id from `versions upload` output** (it has no `--json`): grep a
+     label-agnostic UUID (`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`), so an output-wording change
+     doesn't silently break it, and **fail loud** on an empty id/URL rather than promoting a blank.
+   - GitHub Actions already runs `run:` steps under **`bash -eo pipefail`**, so a `wrangler … | tee`
+     failure propagates on its own (no manual `set -o pipefail` needed) — but that same default
+     `errexit` means the capture must use `grep -m1 … || true`, or a no-match (or a `head` SIGPIPE)
+     aborts the step before the guard can print a useful error.
+   - **Version Preview URLs must be enabled per env.** Only DEV's is proven (via the `preview` job);
+     UAT/PROD have `workers_dev` but *version* preview URLs are a separate toggle. If the URL guard
+     trips on a first run, enable Preview URLs for that Worker (dashboard / `"preview_urls": true`) or
+     add `--preview-alias`.
 
 ---
 
@@ -261,8 +290,12 @@ can't satisfy it, so unattended automation can't skip UAT by accident.
 
 **Local:** `pnpm deploy:dev|uat|prod` deploy by hand; `wrangler dev` runs the Worker + SPA locally.
 
-**Rollback:** every `wrangler deploy` records a Worker version, so roll back with `wrangler rollback`
-(per env) or by re-running the deploy for a previous tag/commit's artifact.
+**Rollback:** every **upload** records a Worker version (the promote only shifts traffic to it), so
+roll back with `wrangler rollback` (per env), by promoting a known-good version directly
+(`wrangler versions deploy <prev-id>@100 --env <env> --yes`), or by re-running the deploy for a
+previous tag/commit's artifact. Rollback stays **manual** — the pre-promote smoke already blocks a
+build that fails to serve before any traffic, so an auto-revert was left out for simplicity (a fuller
+rollback runbook is a documented later step).
 
 **Branch protection:** `main` is Strict-protected (PR required, the 3 CI checks must pass, branch up
 to date, enforced on admins). The CD checks are intentionally *not* required (they skip on PRs or
@@ -275,12 +308,18 @@ depend on Cloudflare).
 Documented as deliberate non-goals for v1; each slots into what exists:
 
 - **R2-keyed artifacts** for retention beyond GitHub's 90 days.
-- **Gradual/canary PROD rollout** — `wrangler versions upload` + `wrangler versions deploy <id>@<pct> --yes`
-  (deferred because `versions deploy` is interactive and `versions upload` has no version-id JSON to
-  capture — brittle to wire robustly).
+- **Gradual/canary PROD rollout** — the upload-then-promote **mechanism is now wired** (§3.1): the two
+  blockers once cited here (interactive `versions deploy`, no version-id to capture) are resolved via
+  `--yes` + a grepped version id. What remains deferred is the *percentage split* itself
+  (`versions deploy <new>@10 <old>@90` → observe → `@100`), which also needs the current live version id
+  (`wrangler deployments status --json`) and, to be meaningful, error-rate gating. Kept out for
+  simplicity until real traffic warrants it.
 - **Custom domains** (replace the `workers.dev` URLs).
 - **HTMLRewriter SPA-shell** config variant (stream config into `index.html`, no extra round-trip).
 - **Vitest CD job** when tests land.
 - **Backend:** API routes via `run_worker_first: ["/api/*"]`, a Durable Object class for WS fan-out,
   or a Container for Python — each just adds bindings to the dev/uat/prod blocks already in
-  `wrangler.jsonc`.
+  `wrangler.jsonc`. **Caveat for that work:** the deploy jobs now use `versions upload`/`versions
+  deploy`, which **cannot apply Durable Object migrations** (migrations are atomic — Cloudflare
+  requires a plain `wrangler deploy`). A release that introduces or changes a DO migration will need a
+  `wrangler deploy` path rather than the upload→smoke→promote gate.

@@ -206,8 +206,10 @@ deployments” → check `prod` → Approve and deploy**. It promotes the same a
 > `v1.2.3-beta`) classifies as `none` and deploys nothing, and a version that isn't higher than the
 > latest release (a lower or duplicate number) is rejected by CI before any deploy.
 
-**Rollback:** every deploy records a Worker version — roll back per env with `wrangler rollback`, or
-re-tag/redeploy a previous good commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
+**Rollback:** every **upload** records a Worker version (the promote only shifts traffic to it) — roll
+back per env with `wrangler rollback`, promote a prior version
+(`wrangler versions deploy <prev-id>@100 --env <env> --yes`), or re-tag/redeploy a previous good
+commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
 
 ### How it works (in brief)
 
@@ -219,8 +221,11 @@ re-tag/redeploy a previous good commit. Live URLs: `crypto-order-book-{dev,uat,p
   put env config in `VITE_*` vars or `public/`.
 - **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
   `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job.
-- **Post-deploy smoke test** — each deploy then `curl --fail`s the env's `/` and `/config.js`
-  (with retries for edge propagation), so a broken deploy fails the job instead of being found by hand.
+- **Traffic gated behind the smoke test** — each deploy `wrangler versions upload`s a new version
+  (serving no traffic), `curl --fail`s that version's **preview URL** for `/` and `/config.js`, and
+  only then promotes it to 100% (`wrangler versions deploy <id>@100 --yes`) — so a build that **fails
+  the smoke** is never promoted and the previous version keeps serving. A final check hits the live URL
+  to confirm the cutover.
 - **Workers Logs on** — `observability` is enabled in [`wrangler.jsonc`](wrangler.jsonc) (off by
   default), so logs and uncaught exceptions are captured for every env.
 
