@@ -28,6 +28,7 @@ and Tabler icons). Package manager is **pnpm**.
 | `pnpm lint` | `biome lint` (read-only) |
 | `pnpm format` | `biome format --write` |
 | `pnpm check` | `biome check --write` (lint + format, applies safe fixes) |
+| `pnpm release <patch\|minor\|major> [rc]` | `scripts/release-tag.sh` — compute the next tag off the latest release, preflight, then tag + push (drives CD). `rc` → UAT candidate; `--dry-run`/`--yes` supported |
 | `pnpm deploy:dev` / `:uat` / `:prod` | `wrangler deploy --env <name>` to a Cloudflare Workers env |
 | `pnpm cf-typegen` | `wrangler types …` — regenerate the committed `worker/worker-configuration.d.ts` (runtime types from `compatibility_date`) |
 | `pnpm cf-typegen:check` | `wrangler types … --check` — fail if that file is stale vs `wrangler.jsonc` (CI gate) |
@@ -174,6 +175,13 @@ Invariants to preserve when editing the pipeline:
   failing the job before any deploy.
 - per-env `CLOUDFLARE_API_TOKEN` secrets; CF `Workers Scripts:Edit` is account-wide (so the win is
   revocable-per-env creds + prod-gating, not per-script lockdown).
+- **cutting release tags: `pnpm release <patch|minor|major> [rc]`** (`scripts/release-tag.sh`) — you
+  pick the bump; it computes the next tag off the latest release (same baseline as the gate, so it
+  never collides/regresses), preflights the target commit (on main, up-to-date, live `dist-<sha>`
+  artifact via `gh`), then tags + pushes plain git tags. A **final release pins to the tested `rc`'s
+  commit** (build-once-promote) and attaches `gh` release notes (best-effort). We evaluated and
+  **rejected release-please** for this financial-app model (its wins don't apply to a private app,
+  it's weak on prereleases/UAT sign-off, and needs a prod-triggering write-scoped PAT).
 
 **Live & protected:** configured and live on `*.timurjalilov1.workers.dev`; `main` is Strict
 branch-protected (PR + the 3 CI checks, enforced on admins; CD checks not required).
