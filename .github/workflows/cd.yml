@@ -85,6 +85,10 @@ jobs:
     name: Build artifact
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # mint the Sigstore OIDC token to sign the attestation
+      attestations: write # persist the provenance attestation
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -94,6 +98,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build # tsc -b && vite build
+      # Attest SLSA build provenance for the bundle BEFORE upload, so the exact dist-<sha> bytes that
+      # build-once promotes to every env carry a signed, verifiable record of which workflow + commit
+      # produced them. Bare actions/attest (subject-path only) generates build provenance by default.
+      - name: Attest build provenance
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: dist/**/*
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ github.sha }}
@@ -161,6 +172,9 @@ jobs:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read # gh attestation verify (provenance)
     environment:
       name: dev
       url: https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
@@ -180,6 +194,12 @@ jobs:
         with:
           name: dist-${{ github.sha }}
           path: dist
+      # Verify the downloaded artifact carries valid SLSA build provenance (from the build job) before
+      # uploading/promoting — a build with any unattested file never reaches an env (item #6).
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-attestation.sh dist "$GITHUB_REPOSITORY"
       # Upload a new version — this routes NO traffic yet — so we can smoke it before promoting.
       # Capture the version id (grep the `Worker Version ID:` line, so a UUID-shaped binding — e.g. a
       # future D1 database_id — can't be mistaken for it) and its preview URL. GitHub runs steps under
@@ -228,6 +248,7 @@ jobs:
     permissions:
       contents: read
       actions: read # look up + download the cross-run build artifact
+      attestations: read # gh attestation verify (provenance)
     environment:
       name: uat
       url: https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
@@ -263,6 +284,11 @@ jobs:
           path: dist
           run-id: ${{ steps.resolve.outputs.run_id }}
           github-token: ${{ github.token }}
+      # Verify build provenance — same gate as DEV (see comments there).
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-attestation.sh dist "$GITHUB_REPOSITORY"
       # Same gate as DEV (see comments there): upload → smoke the preview URL → promote → confirm live.
       - name: Upload version
         id: upload
@@ -302,6 +328,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      attestations: read # gh attestation verify (provenance)
     environment:
       name: prod
       url: https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev
@@ -337,6 +364,11 @@ jobs:
           path: dist
           run-id: ${{ steps.resolve.outputs.run_id }}
           github-token: ${{ github.token }}
+      # Verify build provenance — same gate as DEV (see comments there).
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-attestation.sh dist "$GITHUB_REPOSITORY"
       # Same gate as DEV (see comments there): upload → smoke the preview URL → promote → confirm live.
       - name: Upload version
         id: upload
