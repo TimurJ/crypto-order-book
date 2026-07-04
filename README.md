@@ -102,12 +102,14 @@ For the full setup history, the decisions, and the gotchas, see [`docs/husky-set
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same gates on every
 pull request and on push to `main`. CI is the authoritative check — it mirrors the local hooks on the
-server, so nothing broken lands even if a hook was bypassed or skipped. Five jobs:
+server, so nothing broken lands even if a hook was bypassed or skipped. Six jobs:
 
 - **Lint, typecheck & build** — `biome ci` (read-only lint + format) then `pnpm build`
   (`tsc -b && vite build`).
 - **Test (Vitest)** — `pnpm test:run` (`vitest run`); mirrors the pre-push test step.
 - **Secret scan** — [gitleaks](https://github.com/gitleaks/gitleaks-action) over the full git history.
+- **Dependency review** — [dependency-review](https://github.com/actions/dependency-review-action)
+  blocks a PR that adds a dependency with a moderate-or-higher known advisory (PR-only).
 - **Commit messages** — [commitlint](#commit-messages) on the PR's commits (backstop to the local
   `commit-msg` hook).
 - **Shell lint** — [shellcheck](https://www.shellcheck.net) + `bash -n` on `scripts/*.sh`, plus
@@ -122,9 +124,10 @@ just advised — an `engines.node: ">=24 <25"` gate (with `engineStrict: true` i
 makes `pnpm install` hard-fail on Node 22/26, on every machine and in CI.
 
 `main` is **branch-protected**: changes land via PR, and the required CI checks must pass (with the
-branch up to date) before merging — enforced on admins too. Add the new **Test** and **Shell lint**
-checks to the required set once they have run on a PR. The CD checks are intentionally *not* required (they skip on
-PRs or depend on Cloudflare).
+branch up to date) before merging — enforced on admins too. Add newly-landed checks (**Test**,
+**Shell lint**, **Dependency review**, and — once the maintainer enables CodeQL default setup —
+**CodeQL**) to the required set once they have first run on a PR. The CD checks are intentionally
+*not* required (they skip on PRs or depend on Cloudflare).
 
 For the full setup history, the decisions, and the gotchas, see [`docs/ci-setup.md`](docs/ci-setup.md).
 

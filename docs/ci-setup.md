@@ -86,9 +86,11 @@ It **relies on** config that already existed:
 | `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
 | `test` | **Test (Vitest)** | PR + push to `main` | *Added later with the test harness — see [`docs/vitest-setup.md`](vitest-setup.md). Same setup block as `verify`, runs `pnpm test:run`.* |
 | `shell` | **Shell lint (shellcheck)** | PR + push to `main` | *Added later.* Checkout-only (no pnpm/node) → `bash -n` + `shellcheck` on `scripts/*.sh`, and `shellcheck --shell=sh` on the Husky hooks. Guards the release script's portability (GNU ↔ BSD) and syntax — nothing else lints shell (Biome is ts/tsx-only). |
+| `dependency-review` | **Dependency review** | **PR only** (`if: github.event_name == 'pull_request'`) | *Added later.* Checkout-only → `actions/dependency-review-action` with `fail-on-severity: moderate`. Blocks a PR introducing a dependency with a moderate-or-higher known advisory (reads GitHub's dependency-review API; the dependency graph is on for this public repo). Inherits `contents: read` — findings in the job summary, no PR comment. |
 
-`verify` and `test` are the only jobs that install dependencies; `secrets`, `commits`, and `shell`
-need only a checkout. Only `commits` is PR-gated (on a push to `main` there is no PR commit range to lint — see §4).
+`verify` and `test` are the only jobs that install dependencies; `secrets`, `commits`, `shell`, and
+`dependency-review` need only a checkout. `commits` and `dependency-review` are PR-gated: on a push to
+`main` there is no PR commit range to lint, nor a base…head dependency diff to review (see §4).
 
 Shell-job specifics worth remembering: `shellcheck` **and** `bash` are preinstalled on
 `ubuntu-latest`, so the job needs no marketplace action or `apt-get` (nothing to pin — the sole
@@ -98,6 +100,15 @@ than passing the glob directly; and the Husky hooks are shebang-less and run und
 Linux), so they're linted with `--shell=sh`, not as bash. Those hooks are discovered with
 `git ls-files '.husky/*'` (not a glob) so a newly added hook can't slip past unlinted — and it skips
 the gitignored `.husky/_/` stubs that a plain glob would wrongly hand to shellcheck.
+
+**Code scanning (CodeQL) is separate — GitHub's *default setup*, not a `ci.yml` job.** Enabled once by
+the maintainer in **Settings → Code security → Code scanning → "CodeQL analysis" → Default** (languages
+auto-detected: `actions` / JavaScript / TypeScript). It runs as a GitHub-managed workflow (on PRs and a
+weekly schedule) and produces a **`CodeQL`** check to add to `main`'s required set after its first run.
+Why default setup over an advanced `github/codeql-action` workflow: it's GitHub-hosted with **nothing to
+SHA-pin** (the CD pinning threat model — a third-party action running with the Cloudflare token — doesn't
+apply), it auto-updates, and a scaffold with little app code gains nothing from custom query suites. The
+point is having SAST wired *before* the order-book logic lands.
 
 ### 3.2 Action pins
 
@@ -115,6 +126,7 @@ first bump).
 | `actions/setup-node` | Install Node from `.nvmrc`; `cache: pnpm` |
 | `gitleaks/gitleaks-action` | Full-history secret scan |
 | `wagoid/commitlint-github-action` | Conventional-Commits check on PR commits |
+| `actions/dependency-review-action` | Block a PR adding a moderate+ vulnerable dependency (PR-only) |
 
 Dependabot's `github-actions` ecosystem keeps them current — on a bump it rewrites **both** the SHA
 and the `# vX.Y.Z` comment (grouped weekly, 7-day cooldown). **Caveat:** Dependabot *security alerts*
@@ -252,8 +264,10 @@ action versions to whatever the live marketplace shows.
 ## 8. Deferred / future
 
 - **`test` job — DONE.** Landed with the Vitest harness; see [`docs/vitest-setup.md`](vitest-setup.md).
-- **Dependency automation** (Dependabot) + **SAST** (CodeQL) — fits the existing security posture;
-  tracked in [`production-readiness.md`](production-readiness.md) Tier 2.
+- **Supply-chain PR gates — DONE.** `dependency-review` blocks a PR that adds a moderate+ vulnerable
+  dependency (§3.1), and **CodeQL** runs via GitHub's *default setup* (a Settings toggle, not a
+  `ci.yml` job — see the CodeQL note in §3.1). Dependency automation (Dependabot) shipped earlier — see
+  [`docs/dependabot-setup.md`](dependabot-setup.md).
 - **Node-version matrix** — single Node (`.nvmrc`, enforced via `engines`) for now; a matrix would only
   matter once the app must support multiple runtimes (which would mean widening/removing the `engines` gate).
 - **Caching beyond the pnpm store** — `tsc -b` build-info / Vite cache could be cached if CI time

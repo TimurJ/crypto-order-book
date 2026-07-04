@@ -79,6 +79,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Dependency review — blocks a PR that introduces a dependency with a known advisory (moderate+),
+  # reading GitHub's dependency-review API (the dependency graph is on for this public repo). PR-only
+  # like `commits` (it diffs the PR's base…head dependency changes; a push to `main` has no diff).
+  # Least-privilege: inherits the top-level contents: read — findings land in the Actions job summary
+  # + the failed check, no PR comment (so no pull-requests: write). Dependabot PRs pass through on
+  # their read-only token. fail-on-scopes defaults to runtime, so dev-tooling advisories don't block.
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
   commits:
     name: Commit messages (commitlint)
     if: github.event_name == 'pull_request'

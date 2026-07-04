@@ -110,7 +110,7 @@ it updated when the setup itself changes).
 
 CI lives in `.github/workflows/ci.yml` and runs on **pull requests** and **pushes to `main`**. It is
 the *authoritative* gate — it re-runs the local hooks' checks on the server, so bypassed/skipped hooks
-(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Five parallel
+(`--no-verify`, `HUSKY=0`, commits made via GitHub's web UI) can't land broken state. Six parallel
 jobs, each a distinct PR check (clean targets for branch protection):
 
 - **`verify`** — `pnpm install --frozen-lockfile`, then `pnpm biome ci` (read-only lint + format,
@@ -126,6 +126,11 @@ jobs, each a distinct PR check (clean targets for branch protection):
 - **`shell`** — `shellcheck` + `bash -n` on `scripts/*.sh`, plus `shellcheck --shell=sh` on the Husky
   hooks. Guards the PROD-cutting release helper's cross-platform portability (GNU on WSL ↔ BSD on
   macOS) and syntax — nothing else lints shell (Biome is ts/tsx-only).
+- **`dependency-review`** — `actions/dependency-review-action@v5`, PR-only; fails a PR that introduces
+  a dependency with a **moderate**-or-higher known advisory (reads GitHub's dependency-review API — the
+  dependency graph is on for this public repo). Checkout-only, inherits `contents: read` (findings in
+  the job summary, no PR comment). Vulnerability-gating only — `license-check` no-ops without an
+  allow/deny list.
 
 Design decisions:
 
@@ -152,6 +157,15 @@ Design decisions:
   pin). Gotchas it encodes: `bash -n` checks only its *first* argument, so the syntax step **loops**
   over `scripts/*.sh`; and the shebang-less Husky hooks run under `/bin/sh` (dash on Linux), so
   they're linted with `--shell=sh`. Like `test`, add it to `main`'s required checks after its first PR run.
+- **Supply-chain gates are split: `dependency-review` is a CI job, CodeQL is default setup.**
+  `dependency-review` runs PR-only (it needs a base…head diff — a push to `main` has none) at
+  least-privilege `contents: read` (no PR comment ⇒ no `pull-requests: write`); the `moderate`
+  threshold blocks moderate/high/critical while skipping low-sev transitive noise, and the action's
+  default `runtime` scope keeps dev-tooling advisories quiet. **CodeQL uses GitHub's *default setup*
+  (a repo Settings toggle), not an advanced workflow file** — it's GitHub-hosted with nothing to
+  SHA-pin, so unlike the CF-token-bearing CD actions the pinning threat model doesn't apply, and a
+  scaffold with little app code gains nothing from custom query suites. Add both new checks
+  (`dependency-review`, `CodeQL`) to `main`'s required set after their first PR run.
 
 **Full setup, gotchas, and a from-scratch recipe:** [`docs/ci-setup.md`](docs/ci-setup.md) (keep it
 updated when the setup itself changes).
