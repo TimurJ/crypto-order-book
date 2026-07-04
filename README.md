@@ -188,6 +188,10 @@ pnpm release minor --dry-run
 `--dry-run` previews; `--yes` skips the confirmation prompt. The script pushes plain git tags, so
 the existing `cd.yml` triggers exactly as before — it's just the version math + preflight automated.
 
+A **final release requires a matching `-rc.*` that's already on `origin`** (proof it deployed to
+UAT); the preflight blocks otherwise. To ship `main` HEAD straight to PROD without a UAT candidate,
+pass `--allow-no-rc` explicitly (`--yes` alone won't bypass this).
+
 The PROD run then **pauses for approval**: go to **Actions → the running deploy → “Review
 deployments” → check `prod` → Approve and deploy**. It promotes the same artifact UAT ran.
 
