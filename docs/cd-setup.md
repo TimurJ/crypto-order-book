@@ -42,9 +42,11 @@ now, and to be the skeleton a Node/Python backend slots into later.
 | UAT trigger | **Tag `vX.Y.Z-rc.N`** (trunk-based) | No long-lived release branches; semver-aligned |
 | Deploy tokens | **One per GitHub Environment** | Independently revocable; prod token only exposed to the gated prod job |
 | Wrangler in CI | **`pnpm exec wrangler`** (pinned dep) | Mirrors `pnpm biome ci` over `setup-biome` — no version drift vs the lockfile |
+| Action pins | **Full commit SHA** (`@<sha> # vX.Y.Z`) | Immutable ref — a retagged/compromised action can't change what runs **with the deploy token**; Dependabot bumps the SHA + comment. See [`ci-setup.md`](ci-setup.md) §3.2. |
 
-These were settled by discussion before any code, then stress-tested by feeding the plan through a
-second reviewer twice (which caught two real bugs — see §4).
+These forks were settled by discussion before any code, then stress-tested by feeding the plan
+through a second reviewer twice (which caught two real bugs — see §4). The **Action pins** row came
+later — a post-launch supply-chain hardening step, outside that original review.
 
 ---
 

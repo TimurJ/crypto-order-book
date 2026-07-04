@@ -141,7 +141,9 @@ Design decisions:
 - **Action order matters:** `pnpm/action-setup` runs **before** `actions/setup-node`, because
   setup-node's `cache: pnpm` needs the pnpm binary to resolve the store path.
 - **Hygiene:** least-privilege `permissions: contents: read` (the `commits` job adds `pull-requests:
-  read`); a `concurrency` group cancels superseded runs on a branch; actions are pinned to major tags.
+  read`); a `concurrency` group cancels superseded runs on a branch; every action is pinned to a
+  **full commit SHA** (`@<sha> # vX.Y.Z`; Dependabot bumps the SHA + comment) — immutable against a
+  retagged/compromised action, which in CD would run with the Cloudflare token.
 - **`test` is its own job, not folded into `verify`** — keeps one clean PR check per concern
   (distinct branch-protection targets) at the cost of a second `pnpm install`. After it runs once on
   a PR, add it to `main`'s required checks.
