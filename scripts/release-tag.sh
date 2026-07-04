@@ -8,7 +8,7 @@
 #   vX.Y.Z         -> PROD (approval-gated)
 #   vX.Y.Z-rc.N    -> UAT
 #
-# Usage:  pnpm release <patch|minor|major> [rc] [--dry-run] [--yes]
+# Usage:  pnpm release <patch|minor|major> [rc] [--dry-run] [--yes] [--allow-no-rc]
 #
 #   pnpm release patch        v0.1.0 -> v0.1.1        (PROD)
 #   pnpm release minor        v0.1.0 -> v0.2.0        (PROD)
@@ -16,31 +16,34 @@
 #   pnpm release patch rc     v0.1.0 -> v0.1.1-rc.1   (UAT; rc.N auto-increments)
 #   pnpm release minor --dry-run                      (preview + preflight, no tag/push)
 #
-# You always choose the bump — this never guesses it from commit messages. The next
-# version is computed off the latest RELEASE tag on the remote, which is the exact
-# baseline cd.yml's monotonic gate uses, so the tag it produces always passes.
+# You always choose the bump — this never guesses it from commit messages. The next version
+# is computed off the latest RELEASE tag (after fetching), the same baseline cd.yml's monotonic
+# gate uses, so the tag it produces always passes. A final release only pins to an rc that's on
+# origin — proof it actually deployed to UAT.
 #
 # A FINAL release pins to the exact commit the tested rc points to (build-once-promote:
 # PROD ships byte-for-byte what UAT signed off), and attaches auto-generated release
 # notes via `gh` (best-effort — the deploy never depends on gh).
 set -euo pipefail
 
-part="" rc="" dry="" assume_yes=""
+usage="usage: pnpm release <patch|minor|major> [rc] [--dry-run] [--yes] [--allow-no-rc]"
+part="" rc="" dry="" assume_yes="" allow_no_rc=""
 for a in "$@"; do
   case "$a" in
     patch | minor | major) part="$a" ;;
     rc) rc=1 ;;
     -n | --dry-run | --dry) dry=1 ;;
     -y | --yes) assume_yes=1 ;;
+    --allow-no-rc) allow_no_rc=1 ;;
     *)
       echo "release: unknown argument '$a'" >&2
-      echo "usage: pnpm release <patch|minor|major> [rc] [--dry-run] [--yes]" >&2
+      echo "$usage" >&2
       exit 2
       ;;
   esac
 done
 if [ -z "$part" ]; then
-  echo "usage: pnpm release <patch|minor|major> [rc] [--dry-run] [--yes]" >&2
+  echo "$usage" >&2
   exit 2
 fi
 
@@ -55,6 +58,7 @@ git fetch --tags --quiet origin ||
 latest=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
 latest=${latest:-v0.0.0}
 IFS=. read -r cur_major cur_minor cur_patch <<<"${latest#v}"
+cur_major=$((10#$cur_major)) cur_minor=$((10#$cur_minor)) cur_patch=$((10#$cur_patch))
 case "$part" in
   major) core="v$((cur_major + 1)).0.0" ;;
   minor) core="v${cur_major}.$((cur_minor + 1)).0" ;;
@@ -68,6 +72,8 @@ max_rc=$(git tag -l "${core}-rc.*" | sed -E 's/.*-rc\.//' | sort -n | tail -1 ||
 head=$(git rev-parse HEAD)
 pin_note=""
 warn_fallback=""
+fail_no_rc=""
+fail_local_rc=""
 target="$head" # rc, and a final release with no candidate to pin, both tag the current main tip
 if [ -n "$rc" ]; then
   tag="${core}-rc.$((${max_rc:-0} + 1))"
@@ -76,12 +82,19 @@ else
   tag="$core"
   channel="PROD (approval-gated)"
   if [ -n "$max_rc" ]; then
-    # Pin the final release to the exact commit the last tested candidate points to.
+    # Pin the final release to the last tested candidate's commit — but only if that rc is on
+    # origin (i.e. it really deployed to UAT); a local-only rc never ran through UAT.
     pinned_rc="${core}-rc.${max_rc}"
-    target=$(git rev-list -n1 "$pinned_rc")
-    pin_note="pinned to ${pinned_rc} (same bytes UAT tested)"
+    if git ls-remote --exit-code origin "refs/tags/${pinned_rc}" >/dev/null 2>&1; then
+      target=$(git rev-list -n1 "$pinned_rc")
+      pin_note="pinned to ${pinned_rc} (latest rc deployed to UAT)"
+    else
+      fail_local_rc="highest rc ${pinned_rc} exists only locally, not on origin — it never deployed to UAT (orphaned/interrupted push?). Delete it (git tag -d ${pinned_rc}) or push it, then retry."
+    fi
+  elif [ -n "$allow_no_rc" ]; then
+    warn_fallback="no ${core}-rc.* found — tagging main HEAD (--allow-no-rc: promoting a commit UAT never signed off)"
   else
-    warn_fallback="no ${core}-rc.* found — tagging current main HEAD (no UAT candidate to promote)"
+    fail_no_rc="no ${core}-rc.* for ${core} — nothing UAT-tested to promote. Cut 'pnpm release ${part} rc' first, or pass --allow-no-rc to ship main HEAD."
   fi
 fi
 target_short=$(git rev-parse --short "$target")
@@ -97,6 +110,8 @@ bad() {
 warn() { printf '  [warn] %s\n' "$1"; }
 
 [ -n "$warn_fallback" ] && warn "$warn_fallback"
+[ -n "$fail_no_rc" ] && bad "$fail_no_rc"
+[ -n "$fail_local_rc" ] && bad "$fail_local_rc"
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 if [ "$branch" = "main" ]; then
@@ -164,7 +179,11 @@ if [ -z "$assume_yes" ]; then
 fi
 
 git tag -a "$tag" "$target" -m "$tag"
-git push origin "$tag"
+git push origin "$tag" || {
+  echo "release: push failed — removing the local tag so the next run recomputes cleanly." >&2
+  git tag -d "$tag" >/dev/null 2>&1 || true
+  exit 1
+}
 echo "Pushed $tag -> $target_short."
 
 # Final releases: attach an audit-trail GitHub Release with auto-generated notes. The tag

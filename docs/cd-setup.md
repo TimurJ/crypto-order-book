@@ -243,6 +243,11 @@ the exact commit the tested `rc` points to** (build-once-promote — PROD ships 
 attaches auto-generated `gh` release notes (best-effort). It pushes plain git tags, so the triggers
 below are unchanged.
 
+A final release **requires its `-rc.*` to be on `origin`** (proof it deployed to UAT) — the preflight
+hard-blocks a missing or local-only candidate rather than silently promoting UAT-untested bytes. The
+`--allow-no-rc` flag is the explicit escape hatch to tag `main` HEAD straight to PROD; `--yes` alone
+can't satisfy it, so unattended automation can't skip UAT by accident.
+
 > **Why a helper, not release-please:** we evaluated release-please and kept the explicit tag model —
 > for a private (unpublished) financial app its value-adds don't apply, it's weak on the
 > prerelease/UAT-signoff flow, and it would need a prod-triggering write-scoped PAT. The helper is
