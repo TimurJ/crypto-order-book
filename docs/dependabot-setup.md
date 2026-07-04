@@ -59,7 +59,7 @@ full story.
 | `.github/dependabot.yml` (`ignore`) | **Added later.** `@types/node` semver-major ignored — pins the types to the enforced Node 24 runtime (§2). |
 | `package.json` (`commitlint` block) | Added `rules` disabling `body-max-line-length` + `footer-max-line-length` (§4.1). |
 | `.github/workflows/cd.yml` (`preview` job) | Added `github.actor != 'dependabot[bot]'` to the `if` (§4.2). |
-| `README.md` / `CLAUDE.md` / `PRODUCTION-READINESS.md` | Docs kept in sync; #6 checked off. |
+| `README.md` / `CLAUDE.md` / `docs/production-readiness.md` | Docs kept in sync; #6 checked off. |
 
 ## 4. Gotchas hit & how they were fixed
 
