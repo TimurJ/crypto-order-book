@@ -168,8 +168,11 @@ Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions up
 posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
 PROD, gated on the prod GitHub Environment's required reviewer.
 
-Each deploy job **smoke-tests** the env right after `wrangler deploy` (`curl --fail` on `/` and
-`/config.js`, with `--retry-all-errors` for edge propagation), so a broken deploy fails loudly.
+Each deploy job gates traffic **behind** the smoke test: `wrangler versions upload` stages a new
+version (routing no traffic), `curl --fail` on `/` and `/config.js` smoke-tests that version's
+**preview URL**, then `wrangler versions deploy <id>@100 --yes` promotes it and a final `curl`
+confirms the live URL — so a build that fails the smoke is never promoted (build-once preserved: upload uses the
+downloaded artifact, no rebuild). Rollback stays manual (`wrangler rollback`).
 **Workers Logs** are on via top-level `"observability": { "enabled": true }` in `wrangler.jsonc`
 (logs are off by default; `observability` is inheritable, so the one block covers all three envs).
 

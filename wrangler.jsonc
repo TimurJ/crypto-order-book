@@ -17,6 +17,12 @@
   // (log every request) is right at this scale.
   "observability": { "enabled": true },
 
+  // Enable version Preview URLs for every env (inheritable, like `observability`) so
+  // `wrangler versions upload` always emits a preview URL — the CD pre-promote smoke gate depends on
+  // it (see docs/cd-setup.md §3.1 / §4). Default is on for workers.dev; set explicitly so a dashboard
+  // toggle can't silently break the gate.
+  "preview_urls": true,
+
   // Serve the built SPA from ./dist as static assets. The Worker (`main`) is invoked only for
   // routes that don't match a static file (and for `run_worker_first` routes below).
   "assets": {

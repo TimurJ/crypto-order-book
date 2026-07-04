@@ -180,21 +180,51 @@ jobs:
         with:
           name: dist-${{ github.sha }}
           path: dist
-      - name: Deploy
+      # Upload a new version — this routes NO traffic yet — so we can smoke it before promoting.
+      # Capture the version id (grep the `Worker Version ID:` line, so a UUID-shaped binding — e.g. a
+      # future D1 database_id — can't be mistaken for it) and its preview URL. GitHub runs steps under
+      # `bash -eo pipefail`, so a wrangler failure propagates through `| tee`; `grep … | head -n1 || true`
+      # keeps a no-match or a stray second match from aborting/corrupting output before the empty-guards.
+      - name: Upload version
+        id: upload
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy --env dev
-      # Verify the deploy actually serves before calling it done: the SPA document AND /config.js
-      # (the Worker-generated route — a different code path than static assets). --retry-all-errors
-      # absorbs the few-second edge propagation after deploy. No secrets needed (public URL).
-      - name: Smoke test
+        run: |
+          pnpm exec wrangler versions upload --env dev 2>&1 | tee upload.log
+          ID=$(grep -m1 -iE 'version id' upload.log | grep -oiE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' | head -n1 || true)
+          URL=$(grep -m1 -oE 'https://[a-z0-9.-]+\.workers\.dev' upload.log | head -n1 || true)
+          [ -n "$ID" ] || { echo "::error::No Worker Version ID in versions-upload output."; exit 1; }
+          [ -n "$URL" ] || { echo "::error::No preview URL in versions-upload output — are Preview URLs enabled for this Worker?"; exit 1; }
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      # Gate: smoke the version's preview URL (serves no traffic) BEFORE promoting, so a broken build
+      # fails here and never reaches users. Checks the SPA document AND /config.js (the Worker-generated
+      # route — a different code path than static assets). --retry-all-errors absorbs edge propagation.
+      - name: Smoke test (preview URL)
+        env:
+          BASE: ${{ steps.upload.outputs.url }}
+        run: |
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Preview smoke OK: $BASE"
+      # Promote the smoked version to 100% traffic. Explicit `<id>@100` + `--yes` (versions deploy is
+      # interactive by default).
+      - name: Promote to 100%
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.upload.outputs.id }}
+        run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env dev --yes
+      # Confirm the live edge now serves the promoted version (real URL / routing a preview URL can't show).
+      - name: Confirm live
         run: |
           BASE="https://crypto-order-book-dev.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
           for path in "/" "/config.js"; do
             curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
           done
-          echo "Smoke OK: $BASE"
+          echo "Live OK: $BASE"
 
   # UAT: triggered by an rc tag. Promotes the artifact the main build produced for this SHA.
   deploy-uat:
@@ -240,22 +270,46 @@ jobs:
           path: dist
           run-id: ${{ steps.resolve.outputs.run_id }}
           github-token: ${{ github.token }}
-      - name: Deploy
+      # Same gate as DEV (see comments there): upload → smoke the preview URL → promote → confirm live.
+      - name: Upload version
+        id: upload
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy --env uat
-      - name: Smoke test
+        run: |
+          pnpm exec wrangler versions upload --env uat 2>&1 | tee upload.log
+          ID=$(grep -m1 -iE 'version id' upload.log | grep -oiE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' | head -n1 || true)
+          URL=$(grep -m1 -oE 'https://[a-z0-9.-]+\.workers\.dev' upload.log | head -n1 || true)
+          [ -n "$ID" ] || { echo "::error::No Worker Version ID in versions-upload output."; exit 1; }
+          [ -n "$URL" ] || { echo "::error::No preview URL in versions-upload output — are Preview URLs enabled for this Worker?"; exit 1; }
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Smoke test (preview URL)
+        env:
+          BASE: ${{ steps.upload.outputs.url }}
+        run: |
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Preview smoke OK: $BASE"
+      - name: Promote to 100%
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.upload.outputs.id }}
+        run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env uat --yes
+      - name: Confirm live
         run: |
           BASE="https://crypto-order-book-uat.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
           for path in "/" "/config.js"; do
             curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
           done
-          echo "Smoke OK: $BASE"
+          echo "Live OK: $BASE"
 
   # PROD: triggered by a release tag. Same cross-run artifact; gated on the prod Environment's
-  # required reviewer. A plain `wrangler deploy` still records a Worker version, so rollback is
-  # available; gradual/canary rollout is a documented later step.
+  # required reviewer (approval precedes upload/smoke/promote). Traffic is gated behind the smoke —
+  # upload a version, smoke its preview URL, then promote to 100%. Rollback stays manual
+  # (`wrangler rollback`); gradual/canary rollout is a documented later step.
   deploy-prod:
     name: Deploy PROD
     needs: classify
@@ -299,15 +353,38 @@ jobs:
           path: dist
           run-id: ${{ steps.resolve.outputs.run_id }}
           github-token: ${{ github.token }}
-      - name: Deploy
+      # Same gate as DEV (see comments there): upload → smoke the preview URL → promote → confirm live.
+      - name: Upload version
+        id: upload
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler deploy --env prod
-      - name: Smoke test
+        run: |
+          pnpm exec wrangler versions upload --env prod 2>&1 | tee upload.log
+          ID=$(grep -m1 -iE 'version id' upload.log | grep -oiE '[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}' | head -n1 || true)
+          URL=$(grep -m1 -oE 'https://[a-z0-9.-]+\.workers\.dev' upload.log | head -n1 || true)
+          [ -n "$ID" ] || { echo "::error::No Worker Version ID in versions-upload output."; exit 1; }
+          [ -n "$URL" ] || { echo "::error::No preview URL in versions-upload output — are Preview URLs enabled for this Worker?"; exit 1; }
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - name: Smoke test (preview URL)
+        env:
+          BASE: ${{ steps.upload.outputs.url }}
+        run: |
+          for path in "/" "/config.js"; do
+            curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
+          done
+          echo "Preview smoke OK: $BASE"
+      - name: Promote to 100%
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.upload.outputs.id }}
+        run: pnpm exec wrangler versions deploy "$VERSION_ID@100" --env prod --yes
+      - name: Confirm live
         run: |
           BASE="https://crypto-order-book-prod.${{ vars.WORKERS_SUBDOMAIN }}.workers.dev"
           for path in "/" "/config.js"; do
             curl --fail --retry 3 --retry-delay 3 --retry-all-errors -sS "$BASE$path" -o /dev/null
           done
-          echo "Smoke OK: $BASE"
+          echo "Live OK: $BASE"
