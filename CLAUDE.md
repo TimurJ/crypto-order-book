@@ -40,6 +40,8 @@ formatting. It replaced ESLint + Prettier. Config lives in `biome.json`.
 - **Scoped to `.ts`/`.tsx` only.** Biome deliberately does **not** touch CSS or JSON. Do not
   add CSS to its scope: Biome has open upstream bugs parsing Tailwind v4 at-rules
   (`@theme`, `@custom-variant`, `@plugin`), and Vite/Tailwind already own `src/index.css`.
+  The everything-else editor defaults (charset, LF, final newline, 2-space indent) live in
+  **`.editorconfig`**, which mirrors this formatter so CSS/JSON/MD/YAML stay consistent.
 - **Formatter:** 2-space indent, double quotes, no semicolons, `es5` trailing commas, 80-col
   width, LF. (Matches the project's previous Prettier config byte-for-byte.)
 - **Linter:** `recommended` preset + the `react` domain. `useComponentExportOnlyModules` is
