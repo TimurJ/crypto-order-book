@@ -54,8 +54,8 @@ async errors (the real order-book risk) — that hardening lives in the WS/data 
   `max-age` — `.dev` is already preload-forced, so no `includeSubDomains`/`preload`)
 - [x] `worker/config-response.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
   Worker-generated responses (verified: `curl -I /config.js` shows nosniff but no CSP)
-- [x] CSP keeps `script-src 'self'` clean (verified against `dist/index.html`); only `style-src`
-  carries `'unsafe-inline'` (one theme-toggle `<style>`)
+- [x] CSP keeps **both** `script-src` and `style-src` a clean `'self'` (verified against
+  `public/_headers`/`dist/index.html`) — no `'unsafe-inline'` anywhere
 - [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
   `wrangler dev` + `curl`
 - [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
@@ -103,7 +103,7 @@ catches a broken deploy before it's discovered manually — PROD especially.
 - [x] Resolve the sibling **`@cloudflare/workers-types` drift**: dropped the devDep and generate the Worker
       types from `compatibility_date` (`cf-typegen` → committed `worker/worker-configuration.d.ts`, CI-guarded
       by `cf-typegen:check`) — no ignore rule needed. See [`docs/cd-setup.md`](docs/cd-setup.md).
-- [ ] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
+- [x] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
       (`gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts` + `…/automated-security-fixes`)
 
 **Architecture, decisions & roadmap:** [`docs/dependabot-setup.md`](docs/dependabot-setup.md).
@@ -115,10 +115,20 @@ CI/security posture cleanly.
 
 ## Tier 3 — Polish & hygiene
 
-### 7. Branding / HTML metadata
-- [ ] Replace the starter `vite.svg` favicon with a real favicon set
-- [ ] Remove the leftover starter asset `src/assets/react.svg`
-- [ ] Add `<meta name="description">`, `theme-color`, and Open Graph tags to `index.html`
+### 7. Branding / HTML metadata ✅ DONE
+- [x] Replace the starter `vite.svg` favicon — `public/favicon.svg`, the Tabler **chart-histogram**
+      glyph (white on the app's primary teal `#007595`), referenced with `sizes="any"`. **SVG-only**
+      (not a full raster set — see deferred below)
+- [x] Remove the leftover starter asset `src/assets/react.svg` (orphaned, zero references)
+- [x] Add `<meta name="description">`, media-based light/dark `theme-color` (`#ffffff` / `#090b0c`
+      from the `--background` OKLch tokens), and Open Graph + Twitter **text** tags to `index.html`
+- [ ] **Deferred:** raster favicon set — `.ico` + 180×180 `apple-touch-icon` (iOS home-screen) +
+      legacy fallback (SVG favicons degrade to *no* icon on browsers that don't support them)
+- [ ] **Deferred:** `og:image` + `og:url` — needs a canonical domain (build-once bundle is
+      env-identical, so no per-env URL) and a real 1200×630 share image; `twitter:card` currently
+      degrades to a no-art `summary` card until then
+- [ ] **Deferred:** sync `theme-color` to the app's manual `d`-key/`localStorage` theme override
+      (media-based tags track the **OS** scheme only) — would wire `applyTheme()` in `theme-provider.tsx`
 
 ### 8. Onboarding templates
 - [ ] Add `.env.example` (it's allowlisted in `.gitignore` but the file doesn't exist)
@@ -129,12 +139,15 @@ CI/security posture cleanly.
 - [ ] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; helps editors with CSS/JSON/MD)
 - [ ] Consider a PR template / `CODEOWNERS` (low priority while solo)
 
-### 10. Runtime version lock (Node 24) ✅ DONE
+### 10. Runtime & package-manager version lock ✅ DONE
 - [x] Enforce the Node major, not just advise it: `engines.node: ">=24 <25"` in `package.json` +
       **`engineStrict: true`** in `pnpm-workspace.yaml` → `pnpm install` hard-fails on Node 22/26
       (verified empirically; `engines` alone only warns on pnpm 11, and `.npmrc` `engine-strict` is a
       no-op there). `.nvmrc` still selects which 24.x runs.
 - [x] Pairs with the `@types/node` major-ignore in Dependabot (#6) — the types track the locked runtime
+- [x] Lock the **package-manager** version too: `pmOnFail: download` (`pnpm-workspace.yaml`) makes pnpm
+      self-manage from `package.json`'s `packageManager` field (dropped Corepack) — same determinism for
+      pnpm as `engineStrict` gives for Node.
 
 **Why:** `.nvmrc` was advisory (nvm-only); nothing stopped a contributor or CI from installing on a
 different Node major. For a financial-app posture, the runtime must not silently drift across machines.
