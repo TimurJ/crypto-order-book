@@ -225,18 +225,32 @@ gh secret set CLOUDFLARE_API_TOKEN --env prod
 
 **Live URLs:** `https://crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`
 
-**Release flow** (the day-to-day — also in the README):
+**Release flow** (the day-to-day — also in the README). Use **`pnpm release`**
+(`scripts/release-tag.sh`) rather than hand-tagging — you choose the bump, it does the version math,
+preflight, and push:
 ```bash
 # 1) Land work on main (PR → CI → merge). The main build auto-deploys DEV.
-# 2) UAT — tag the merged commit:
-git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1
-# 3) PROD — after UAT looks good. The run waits for approval:
-git tag v0.1.0 && git push origin v0.1.0
+# 2) UAT — cut a candidate (rc.N auto-increments off the latest release):
+pnpm release patch rc     # e.g. v0.1.1-rc.1  → UAT
+# 3) PROD — after UAT looks good. Pins to the tested rc's commit; the run waits for approval:
+pnpm release patch        # → v0.1.1          → PROD (approval-gated)
 #    Approve in: Actions → the run → "Review deployments" → prod → Approve.
 ```
-> **Ordering rule:** only tag a commit that has **landed on `main` and finished its `build`** — that's
-> the only thing that produced a `dist-<sha>` for tag deploys to promote. Tagging anything else fails
-> the deploy loudly (by design) rather than silently rebuilding.
+`patch|minor|major` is your explicit choice (never derived from commits); `--dry-run` previews,
+`--yes` skips the prompt. The script computes the next version off the latest release tag (the same
+baseline the monotonic gate uses, so it never collides or regresses), and a **final release pins to
+the exact commit the tested `rc` points to** (build-once-promote — PROD ships what UAT ran) plus
+attaches auto-generated `gh` release notes (best-effort). It pushes plain git tags, so the triggers
+below are unchanged.
+
+> **Why a helper, not release-please:** we evaluated release-please and kept the explicit tag model —
+> for a private (unpublished) financial app its value-adds don't apply, it's weak on the
+> prerelease/UAT-signoff flow, and it would need a prod-triggering write-scoped PAT. The helper is
+> just the version math + preflight; the pipeline stays tag-driven.
+
+> **Ordering rule:** a tag only deploys a commit that has **landed on `main` and finished its
+> `build`** — the only thing that produced a `dist-<sha>` to promote. The `pnpm release` preflight
+> checks this locally; tagging anything else still fails the deploy loudly (by design) server-side.
 
 **Local:** `pnpm deploy:dev|uat|prod` deploy by hand; `wrangler dev` runs the Worker + SPA locally.
 

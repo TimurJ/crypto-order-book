@@ -52,6 +52,7 @@ Then open the URL Vite prints (default http://localhost:5173).
 | `pnpm lint` | Lint with Biome |
 | `pnpm format` | Format with Biome (`--write`) |
 | `pnpm check` | Lint + format and apply safe fixes (`biome check --write`) |
+| `pnpm release <patch\|minor\|major> [rc]` | Compute + push the next release tag off the latest release (add `rc` for a UAT candidate; `--dry-run` to preview). Drives the CD deploy. |
 | `pnpm deploy:dev` / `:uat` / `:prod` | Deploy to a Cloudflare Workers environment (`wrangler deploy --env <name>`) |
 | `pnpm cf-typegen` | Regenerate the committed `worker/worker-configuration.d.ts` (runtime types from `wrangler.jsonc`'s `compatibility_date`) |
 | `pnpm cf-typegen:check` | Fail if that generated file is stale vs `wrangler.jsonc` (used by CI) |
@@ -166,19 +167,26 @@ For the full step-by-step setup history, the decisions, and the gotchas, see
 
 ### Releasing — deploy to UAT / PROD
 
-Day-to-day, after work has landed on `main`:
+Day-to-day, after work has landed on `main`, use **`pnpm release`** — you choose the bump; it finds
+the latest release, computes the next tag, runs preflight checks, then tags and pushes:
 
 ```bash
 # DEV deploys automatically on merge to main — nothing to do.
 
-# UAT — tag the (already-merged) commit with a release candidate:
-git tag v0.1.0-rc.1
-git push origin v0.1.0-rc.1
+# UAT — cut a release candidate (rc.N auto-increments):
+pnpm release patch rc      # e.g. v0.1.0 -> v0.1.1-rc.1
 
-# PROD — once UAT looks good, tag the same commit with the release version:
-git tag v0.1.0
-git push origin v0.1.0
+# PROD — once UAT looks good, cut the release. It pins to the exact commit the tested
+# rc points to (so PROD ships byte-for-byte what UAT ran) and attaches release notes:
+pnpm release patch         # -> v0.1.1
+
+# Preview without tagging:
+pnpm release minor --dry-run
 ```
+
+`patch|minor|major` is your call (never derived from commits). Add `rc` for a UAT candidate;
+`--dry-run` previews; `--yes` skips the confirmation prompt. The script pushes plain git tags, so
+the existing `cd.yml` triggers exactly as before — it's just the version math + preflight automated.
 
 The PROD run then **pauses for approval**: go to **Actions → the running deploy → “Review
 deployments” → check `prod` → Approve and deploy**. It promotes the same artifact UAT ran.

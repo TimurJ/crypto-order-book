@@ -21,6 +21,7 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "release": "bash scripts/release-tag.sh",
     "deploy:dev": "wrangler deploy --env dev",
     "deploy:uat": "wrangler deploy --env uat",
     "deploy:prod": "wrangler deploy --env prod",
