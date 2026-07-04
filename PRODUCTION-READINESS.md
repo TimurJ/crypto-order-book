@@ -141,10 +141,15 @@ CI/security posture cleanly.
 - [x] Add a `!.dev.vars.example` negation to `.gitignore` — the `.dev.vars.*` rule would otherwise
       ignore it (unlike `.env.example`, which was already allowlisted via `!.env.example`)
 
-### 9. Minor
-- [ ] Add a `LICENSE`
-- [ ] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; helps editors with CSS/JSON/MD)
-- [ ] Consider a PR template / `CODEOWNERS` (low priority while solo)
+### 9. Minor ✅ DONE
+- [x] Add a `LICENSE` — **MIT** (`Copyright (c) 2026 Timur Jalilov`); canonical text so GitHub
+      detects it as MIT. Also added `license`/`author` metadata to `package.json` + a README
+      "License" section (the repo is public and was previously implicitly all-rights-reserved)
+- [x] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; supplies charset/LF/final-newline/
+      2-space-indent defaults for CSS/JSON/MD/YAML, mirroring the Biome formatter)
+- [x] Add a PR template (`.github/PULL_REQUEST_TEMPLATE.md` — light checklist) + `CODEOWNERS`
+      (`* @TimurJ`). **Follow-up (user/GitHub):** CODEOWNERS is inert until branch protection's
+      *"Require review from Code Owners"* is enabled
 
 ### 10. Runtime & package-manager version lock ✅ DONE
 - [x] Enforce the Node major, not just advise it: `engines.node: ">=24 <25"` in `package.json` +

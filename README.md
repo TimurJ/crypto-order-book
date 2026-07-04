@@ -284,3 +284,7 @@ This places UI components in `src/components/ui`. Import them via the `@` alias:
 ```tsx
 import { Button } from "@/components/ui/button"
 ```
+
+## License
+
+This project is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
