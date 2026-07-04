@@ -130,9 +130,16 @@ CI/security posture cleanly.
 - [ ] **Deferred:** sync `theme-color` to the app's manual `d`-key/`localStorage` theme override
       (media-based tags track the **OS** scheme only) — would wire `applyTheme()` in `theme-provider.tsx`
 
-### 8. Onboarding templates
-- [ ] Add `.env.example` (it's allowlisted in `.gitignore` but the file doesn't exist)
-- [ ] Add `.dev.vars.example` for the Worker-secrets path documented in `CLAUDE.md`
+### 8. Onboarding templates ✅ DONE
+- [x] Add `.env.example` — a documented **signpost**, not a var list: the app consumes **zero**
+      build-time/client env vars (no `VITE_*`), so it explains that env-specific config is runtime
+      via `/config.js` (`getConfig()` in `src/lib/app-config.ts`; dev via `vite.config.ts`, deployed
+      via `wrangler.jsonc` `vars`) and points Worker secrets to `.dev.vars.example`
+- [x] Add `.dev.vars.example` — documented placeholder for the **future** Worker-secrets path
+      (copy → `.dev.vars` locally; `wrangler secret put <NAME> --env <env>` in deployed envs). No
+      secrets exist today; the three Worker `vars` (`APP_ENV`/`API_BASE_URL`/`WS_URL`) are public
+- [x] Add a `!.dev.vars.example` negation to `.gitignore` — the `.dev.vars.*` rule would otherwise
+      ignore it (unlike `.env.example`, which was already allowlisted via `!.env.example`)
 
 ### 9. Minor
 - [ ] Add a `LICENSE`
