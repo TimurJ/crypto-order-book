@@ -219,6 +219,10 @@ commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
 - **Build once, promote the same bytes** — the bundle is built once on the merge to `main`
   (artifact `dist-<sha>`); UAT/PROD download and deploy *that* artifact, never rebuilding, so PROD
   ships exactly what UAT signed off on.
+- **Build provenance (SLSA)** — the `build` job attests the bundle with
+  [`actions/attest`](https://github.com/actions/attest), and each deploy **verifies** that signed
+  provenance ([`scripts/verify-attestation.sh`](scripts/verify-attestation.sh)) before promoting, so
+  every file it ships is provably from the build.
 - **Runtime config, not build-time** — env values are served by the Worker at `/config.js`
   (`window.__APP_CONFIG__`), read via [`src/lib/app-config.ts`](src/lib/app-config.ts); **never**
   put env config in `VITE_*` vars or `public/`.

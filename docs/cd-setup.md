@@ -44,6 +44,7 @@ now, and to be the skeleton a Node/Python backend slots into later.
 | Wrangler in CI | **`pnpm exec wrangler`** (pinned dep) | Mirrors `pnpm biome ci` over `setup-biome` — no version drift vs the lockfile |
 | Deploy model | **Upload → smoke preview URL → promote to 100%** | Traffic is gated *behind* the smoke — a build that fails the smoke isn't promoted, so it serves no traffic (the live version keeps serving); replaces instant `wrangler deploy`. See §3.1. |
 | Action pins | **Full commit SHA** (`@<sha> # vX.Y.Z`) | Immutable ref — a retagged/compromised action can't change what runs **with the deploy token**; Dependabot bumps the SHA + comment. See [`ci-setup.md`](ci-setup.md) §3.2. |
+| Build provenance | **Attest on build (`actions/attest`), verify before promote** | Proves *which* build produced `dist-<sha>` (SLSA); every file promoted is provably from that build; attestation is out-of-band so build-once byte-identity holds. See §3.1. |
 
 These forks were settled by discussion before any code, then stress-tested by feeding the plan
 through a second reviewer twice (which caught two real bugs — see §4). The **Action pins** and
@@ -96,7 +97,7 @@ respectively), outside that original review.
 | Job | Trigger | What it does |
 |---|---|---|
 | `classify` | tag push | regex the tag → `channel` (`prod` `vX.Y.Z` / `uat` `…-rc.N` / `none`), and **reject a non-increasing version** vs the latest release tag |
-| `build` | **push to `main` only** | `pnpm build` → upload artifact `dist-<sha>` (90-day retention) |
+| `build` | **push to `main` only** | `pnpm build` → **attest SLSA provenance** → upload artifact `dist-<sha>` (90-day retention) |
 | `preview` | PR (same-repo) | `wrangler versions upload --env dev` → comment the preview URL |
 | `deploy-dev` | push to `main` | download same-run artifact → `versions upload` → **smoke the preview URL** → `versions deploy @100` → confirm live |
 | `deploy-uat` | `needs: classify`, channel `uat` | cross-run download `dist-<sha>` → `versions upload` → **smoke preview** → `versions deploy @100` → confirm live |
@@ -106,6 +107,19 @@ respectively), outside that original review.
 Tag deploys never rebuild — they resolve the main-build run for the tag's SHA
 (`gh run list --workflow cd.yml --commit <sha> --branch main`, fail loudly on ≠1 match) and
 `actions/download-artifact` it cross-run. Only `deploy-dev` shares a run with `build`.
+
+**Build provenance (SLSA):** right after `pnpm build`, the `build` job attests the bundle with
+`actions/attest` (`subject-path: dist/**/*`) — a Sigstore-signed SLSA build-provenance record of which
+workflow + commit produced those exact bytes, minted via the job's `id-token: write` /
+`attestations: write` and stored out-of-band (so `dist/` bytes are untouched and build-once holds).
+Each deploy job then **verifies before promoting**: after downloading `dist-<sha>` it runs
+`scripts/verify-attestation.sh dist "$GITHUB_REPOSITORY"` (loops every file through `gh attestation
+verify` — pinned via `--signer-workflow` to the `cd.yml` build job, so only *that* workflow's
+attestation counts — with a short retry for same-run propagation), so every file that
+reaches an env is provably from the build. Free on this public repo — no setting, the `attestations: write` token
+scope enables minting and deploys read with `attestations: read`. `actions/attest` (bare, subject-path
+only) defaults to build provenance; one verify script, three call sites, auto-linted by CI's `shell`
+job.
 
 **Pre-promote smoke (traffic gated behind it):** instead of an instant `wrangler deploy`, each deploy
 job **uploads a new version** (`wrangler versions upload`, which routes *no* traffic), runs
@@ -314,6 +328,7 @@ depend on Cloudflare).
 Documented as deliberate non-goals for v1; each slots into what exists:
 
 - **R2-keyed artifacts** for retention beyond GitHub's 90 days.
+- **Offline provenance verification** — deploys verify via the GitHub API (`gh attestation verify --repo`); plumbing the attest step's `bundle-path` through the artifact would enable offline `--bundle` verification (no API dependency). Deferred — the online path + retry suffices.
 - **Gradual/canary PROD rollout** — the upload-then-promote **mechanism is now wired** (§3.1): the two
   blockers once cited here (interactive `versions deploy`, no version-id to capture) are resolved via
   `--yes` + a grepped version id. What remains deferred is the *percentage split* itself

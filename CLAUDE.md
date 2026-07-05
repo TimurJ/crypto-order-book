@@ -188,7 +188,9 @@ security headers + SPA shell marker on `/` and `nosniff` + the right `env` in `/
 `200`), then `wrangler versions deploy <id>@100 --yes` promotes it and the same script re-checks the
 live URL — so a build that fails the smoke is never promoted (build-once preserved: upload uses the
 downloaded artifact, no rebuild). `scripts/smoke.sh` is shared by both checks and lint-covered by CI's
-`shell` job. Rollback stays manual (`wrangler rollback`).
+`shell` job. The `build` job also **attests SLSA build provenance** for `dist-<sha>` (`actions/attest`),
+and every deploy job **verifies** it (`scripts/verify-attestation.sh`) before promoting — an unattested
+artifact never ships. Rollback stays manual (`wrangler rollback`).
 **Workers Logs** are on via top-level `"observability": { "enabled": true }` in `wrangler.jsonc`
 (logs are off by default; `observability` is inheritable, so the one block covers all three envs).
 
@@ -198,6 +200,11 @@ Invariants to preserve when editing the pipeline:
   not add a tag trigger to `build` (it would break build-once *and* create a second artifact-producing
   run per SHA, tripping the cross-run resolver's "exactly one run" invariant). Only DEV shares a run
   with `build`; UAT/PROD depend on `classify` alone.
+- the `build` job **attests SLSA provenance** for `dist-<sha>` (`actions/attest`) — keep `id-token:
+  write` + `attestations: write` on it; every deploy job **verifies before promoting**
+  (`scripts/verify-attestation.sh`) — keep `attestations: read` + the verify step. `actions/attest`
+  bare (subject-path only) = build provenance; the attestation is out-of-band, so build-once
+  byte-identity is untouched.
 - env config is runtime via `/config.js`, **never `VITE_*`** (see Architecture / `src/lib/app-config.ts`).
 - tag classification: `vX.Y.Z` → prod, `…-rc.N` → uat, else `none` (deploys nothing); a follow-on
   step also **rejects a non-increasing version core** (compared against the latest release tag),
