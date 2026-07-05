@@ -272,7 +272,9 @@ curl -sI http://localhost:8787/config.js  # nosniff + no-store from the Worker (
 
 > **`connect-src` / `style-src` are project-specific** — `_headers` ships unchanged to all three
 > envs (build-once-promote), so per-env exchange `wss://` origins will eventually push the CSP into
-> the Worker. Rationale, the HSTS-on-`.dev` nuance, and the roadmap: [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
+> the Worker. `script-src` stays a strict `'self'`; `style-src` is `'self' 'unsafe-inline'` for the
+> order-book grid + Base UI popup `<style>` injection (locking it is ~0-value).
+> Rationale, the HSTS-on-`.dev` nuance, and the roadmap: [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
 
 ## Commit messages
 

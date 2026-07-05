@@ -305,10 +305,12 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
 - **Security headers:** CSP + `nosniff`/`X-Frame-Options`/`Referrer-Policy`/`Permissions-Policy`/HSTS,
   split across **`public/_headers`** (document + assets; Vite copies it to `dist/`) and
   **`worker/config-response.ts`** (`nosniff` on `/config.js` — Cloudflare's `_headers` does **not**
-  apply to Worker-generated responses). `script-src` and `style-src` are both a clean `'self'` (the
-  theme-toggle transition suppression uses a bundled `.theme-transitions-off` class, not a runtime
-  `<style>`). **`connect-src`/`style-src` are project-specific**, and per-env exchange origins will
-  later push the CSP into the Worker (a build-once `_headers` file is env-identical). HSTS is hygiene
+  apply to Worker-generated responses). `script-src` stays a clean `'self'` (the load-bearing lock);
+  `style-src` is `'self' 'unsafe-inline'` — the order-book grid (AG Grid) + Base UI popups inject runtime
+  `<style>` elements, and locking `style-src` is ~0-value (CSS exfil is already closed by
+  `img-src`/`font-src`/`default-src 'self'`). **`connect-src`/`style-src` are project-specific**, and
+  per-env exchange origins will later push the CSP into the Worker (a build-once `_headers` file is
+  env-identical). HSTS is hygiene
   (`.dev` is already preload-forced).
   **Rationale, the coverage boundary & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,

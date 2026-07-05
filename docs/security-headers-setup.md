@@ -23,7 +23,7 @@ Two coordinated pieces, split along a hard coverage boundary (see below):
 The CSP today:
 
 ```
-default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
 font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';
 frame-ancestors 'none'; upgrade-insecure-requests
 ```
@@ -52,29 +52,30 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
   Vite compiles its modulepreload polyfill *into* the bundle, not as an inline `<script>` — so a
   generic "Vite needs `'unsafe-inline'`" warning does **not** apply here. Keeping `script-src` clean
   is the single most important property: `'unsafe-inline'` there is full XSS.
-- **`style-src 'self'` (clean — no `'unsafe-inline'`).** CSP blocks injected `<style>` blocks and
-  `style="…"` strings without `'unsafe-inline'`, but this app needs neither: Vite extracts component
-  CSS into a same-origin `.css` file (covered by `'self'`), React's `style={{}}` props apply via the
-  CSSOM (`el.style.x = …`, which CSP doesn't intercept), and a dependency sweep found no CSS-in-JS or
-  other runtime `<style>` injection. The one historical exception was
-  [`theme-provider.tsx`](../src/components/theme-provider.tsx): the **base-lyra shadcn scaffold**
-  ships `disableTransitionOnChange` on by default — a next-themes-derived anti-flash that injected a
-  runtime `<style>` (`*{transition:none}`) during a theme swap. We **kept the behavior** (a worthwhile polish — most components use
-  `transition-*`, so without it a theme toggle fades the whole UI's colors) but **refactored the
-  mechanism**: it now toggles a bundled `.theme-transitions-off` class (`src/index.css`) instead of
-  injecting a `<style>`. Identical visual result, no `'unsafe-inline'`. (A nonce was the alternative
-  but doesn't fit a build-once static asset: it must be unique per response and written into both the
-  header and the tag, impossible without routing every response through the Worker.)
+- **`style-src 'self' 'unsafe-inline'`.** The order-book UI injects runtime `<style>` *elements* — AG
+  Grid's JS theme, Base UI's `Select`/`ScrollArea` scrollbar-hiding, and the theme-provider's transient
+  anti-flash `<style>` (below) — so `style-src` allows `'unsafe-inline'`. This is a deliberate,
+  low-value directive to lock: `script-src 'self'` (untouched) is what actually stops XSS;
+  CSS-injection exfiltration (`background:url(…)` attribute selectors) is closed by origin-locking
+  `img-src`/`font-src`/`default-src` (all `'self'`/`data:` here), **not** by `style-src`; and Mozilla
+  Observatory scores `style-src 'unsafe-inline'` a **0-point** penalty (vs **−20** for
+  `script-src 'unsafe-inline'`). The stricter escape hatches were evaluated and rejected as
+  gold-plating for ~0 gain: `style-src-attr` is moot (AG Grid virtualization and Base UI positioning are
+  CSSOM property setters, not inline attributes — AG Grid's old `setAttribute('style', …)` was **fixed in
+  v33.1.1**, Feb 2025, and now uses `style.setProperty(…)`), and Base UI `CSPProvider disableStyleElements`
+  / AG Grid's deprecated legacy CSS theme / a Worker-minted `styleNonce` all add wiring, deprecation, or
+  infra cost for no real security.
+  - **Theme-provider `<style>`.** The base-lyra scaffold's `disableTransitionOnChange` (a
+    next-themes-derived anti-flash) injects a transient `*{transition:none}` `<style>` during a theme
+    swap so colors snap instead of animating, then removes it a frame later — see
+    [`theme-provider.tsx`](../src/components/theme-provider.tsx). `'unsafe-inline'` permits it.
   - **Gotcha — timing + coverage.** The `getComputedStyle` reflow + double-`rAF` in
-    `disableTransitionsTemporarily()` must not be simplified: a class toggle is a cheaper style
-    invalidation than the old `<style>` insertion, so re-enabling transitions too eagerly re-arms them
-    before the swap paints and the color smear returns. **Acceptance test:** toggle the theme in
-    **both Chromium and Firefox** with an element on screen that animates a **pseudo-element** (a focus
-    ring, or a `::before`/`::after` overlay/indicator) — *not* just a plain button, which exercises
-    none of the `::before`/`::after` selectors the three-selector mirror was added for — and confirm
-    no fade smear and no CSP violations. ("build passes + CSP grades clean" covers neither.) The
-    current scaffold has **no** pseudo-element-animating component, so that case is **untestable
-    today** — re-check it when one lands.
+    `disableTransitionsTemporarily()` must not be simplified: removing the `<style>` too eagerly re-arms
+    transitions before the swap paints and the color smear returns. **Acceptance test:** toggle the theme
+    in **both Chromium and Firefox** with an element on screen that animates a **pseudo-element** (a focus
+    ring, or a `::before`/`::after` overlay/indicator) — *not* just a plain button, which exercises none
+    of the `::before`/`::after` selectors — and confirm no fade smear. The current scaffold has **no**
+    pseudo-element-animating component, so that case is **untestable today** — re-check it when one lands.
 - **HSTS is hygiene, not the MITM fix.** The `.dev` gTLD is in the browsers' built-in HSTS preload
   list (`include_subdomains`, `force-https`), so HTTPS is already forced for every `*.workers.dev`
   request before a byte is read. We set a plain `Strict-Transport-Security: max-age=63072000` —
@@ -96,20 +97,24 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
 
 ## ⚠️ Re-derive the CSP per project — do not copy this one
 
-This project's clean result (strict `style-src 'self'` *and* `script-src 'self'`) is **specific to
-this app's dependencies**. It has no runtime-theming grid or hosted chart widget. The moment a
-sibling project adds one, the CSP changes:
+`script-src 'self'` stays clean here (the directive that matters), but this project's `style-src`
+posture is **specific to its dependencies** — it allows `'unsafe-inline'` for the grid + popup `<style>`
+injection. Two lessons worth carrying:
 
-- **AG Grid (JS theming), Highcharts** inject `<style>` blocks / build stylesheets at runtime →
-  force `style-src 'unsafe-inline'` regardless (you can't class-refactor a third-party lib's runtime
-  injection the way we did our own theme-provider).
+- **Read the *current* source, not stale issues.** AG Grid's row/cell virtualization used to set
+  `setAttribute('style', 'transform:…')` (CSP-blocked), but **v33.1.1 (Feb 2025) switched it to CSSOM
+  `style.setProperty(…)`** — CSP-safe — and a maintainer comment on the tracking issue saying "no way to
+  do this" predates the fix and was never updated. What *does* still inject a runtime `<style>` is AG
+  Grid's **JS Theming API** (and libs like Highcharts) → that needs `style-src 'unsafe-inline'` or a
+  per-response `styleNonce`, **not** `style-src-attr`. Always distinguish CSSOM property setters
+  (CSP-exempt) from injected `<style>`/`<link>` elements and parsed `style=""` attributes (CSP-governed).
 - **TradingView's *hosted* widget** additionally pulls scripts and iframes from its origins → needs
   `script-src` / `frame-src` / `connect-src` allowances for those hosts (a self-hosted charting lib
   does not).
 
 So **`style-src` is as project-dependent as `connect-src`**: derive both against each build's actual
-surface (read its `dist/index.html` and inventory its runtime style/script injection) rather than
-pasting this file across projects.
+surface (read its `dist/index.html`, inventory runtime style/script injection, and check whether the
+"inline styles" are CSSOM or real `<style>`/attributes) rather than pasting this file across projects.
 
 ## The build-once-promote constraint on `connect-src`
 
@@ -122,9 +127,6 @@ per-env seam that already produces `/config.js`. (Until they diverge, a single s
 in `_headers` is fine.)
 
 ## Roadmap
-
-> **Done:** `style-src 'unsafe-inline'` dropped — the theme-provider `<style>` injection became a
-> bundled `.theme-transitions-off` class (see the `style-src` decision above).
 
 ### Move the CSP into the Worker
 When per-env `connect-src` is needed (above), or when the Worker starts serving HTML itself
