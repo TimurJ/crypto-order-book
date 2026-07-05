@@ -175,12 +175,14 @@ updated when the setup itself changes).
 CD lives in `.github/workflows/cd.yml` and deploys to **Cloudflare Workers** (Static Assets) across
 three environments. Config is `wrangler.jsonc`: three **named environments** (`[env.dev/uat/prod]`),
 each a separate Worker script (`crypto-order-book-{dev,uat,prod}`). Deploys always pass `--env`.
-The thin Worker `worker/index.ts` serves static assets + per-env `/config.js`; future API/DO/Container
-bindings attach to the env blocks (`run_worker_first: ["/api/*"]`).
+The thin Worker `worker/index.ts` serves static assets + per-env `/config.js` (`run_worker_first:
+["/config.js"]`); future API/DO/Container bindings attach to the env blocks (`/api/*` slots into
+`run_worker_first` when the backend lands).
 
 Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions upload --env dev`,
 posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
-PROD, gated on the prod GitHub Environment's required reviewer.
+PROD, gated on the prod GitHub Environment's required reviewer. The prod/uat Environments also enforce
+a **deployment tag policy** (prod `v*.*.*`, uat `v*.*.*-rc.*`).
 
 Each deploy job gates traffic **behind** the smoke test: `wrangler versions upload` stages a new
 version (routing no traffic), `scripts/smoke.sh` asserts that version's **preview URL** serves the
@@ -190,7 +192,7 @@ live URL — so a build that fails the smoke is never promoted (build-once prese
 downloaded artifact, no rebuild). `scripts/smoke.sh` is shared by both checks and lint-covered by CI's
 `shell` job. The `build` job also **attests SLSA build provenance** for `dist-<sha>` (`actions/attest`),
 and every deploy job **verifies** it (`scripts/verify-attestation.sh`) before promoting — an unattested
-artifact never ships. Rollback stays manual (`wrangler rollback`).
+artifact never ships. Rollback stays manual — see the runbook in [`docs/cd-setup.md`](docs/cd-setup.md) §7.
 **Workers Logs** are on via top-level `"observability": { "enabled": true }` in `wrangler.jsonc`
 (logs are off by default; `observability` is inheritable, so the one block covers all three envs).
 
@@ -211,6 +213,10 @@ Invariants to preserve when editing the pipeline:
   failing the job before any deploy.
 - per-env `CLOUDFLARE_API_TOKEN` secrets; CF `Workers Scripts:Edit` is account-wide (so the win is
   revocable-per-env creds + prod-gating, not per-script lockdown).
+- the `prod`/`uat` Environments enforce a **deployment tag policy** (`v*.*.*` / `v*.*.*-rc.*`, GitHub
+  deployment-branch-policy `type: tag`) — a credential backstop to `classify`. **`dev` must stay
+  open** (its Environment is shared with the `preview` job — a restriction there blocks PR previews).
+  Setup + rollback runbook: [`docs/cd-setup.md`](docs/cd-setup.md) §5/§7.
 - **cutting release tags: `pnpm release <patch|minor|major> [rc]`** (`scripts/release-tag.sh`) — you
   pick the bump; it computes the next tag off the latest release (same baseline as the gate, so it
   never collides/regresses), preflights the target commit (on main, up-to-date, live `dist-<sha>`
@@ -220,7 +226,7 @@ Invariants to preserve when editing the pipeline:
   it's weak on prereleases/UAT sign-off, and needs a prod-triggering write-scoped PAT).
 
 **Live & protected:** configured and live on `*.timurjalilov1.workers.dev`; `main` is Strict
-branch-protected (PR + the 3 CI checks, enforced on admins; CD checks not required).
+branch-protected (PR + the required CI checks, enforced on admins; CD checks not required).
 
 **Full rationale, gotchas, deferred items, and setup steps:** [`docs/cd-setup.md`](docs/cd-setup.md)
 (keep it updated when the setup itself changes).
@@ -336,9 +342,9 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   — never hand-edit it. Why it replaced an `@cloudflare/workers-types` devDep: [`docs/cd-setup.md`](docs/cd-setup.md).
 - **Native build scripts are allow-listed in `pnpm-workspace.yaml` (`allowBuilds`).** pnpm 11
   blocks unapproved build scripts *and fails `pnpm <script>`* until each is resolved to `true`/
-  `false` (never leave the `set this to true or false` placeholder). Current calls: `workerd: true`
-  (Cloudflare runtime for local `wrangler dev`), `sharp: false` (transitive via miniflare for image
-  emulation we don't use).
+  `false` (never leave the `set this to true or false` placeholder). The non-obvious ones: `workerd:
+  true` (Cloudflare runtime for local `wrangler dev`), `sharp: false` (transitive via miniflare for
+  image emulation we don't use).
 - **Node is locked to major 24 and *enforced*.** `engines.node: ">=24 <25"` in `package.json` +
   **`engineStrict: true`** in `pnpm-workspace.yaml` make `pnpm install` hard-fail on any other Node
   major. **Gotcha:** on pnpm 11 the `engines` field **alone only warns** (the docs' "always fails" is

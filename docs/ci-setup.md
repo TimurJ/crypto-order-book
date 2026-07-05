@@ -15,7 +15,8 @@ footguns it sidesteps, and a from-scratch recipe to reproduce it on the next pro
 > `commits`. A fourth job, **`test` (Vitest)**, was added later when the test harness landed; it is
 > documented in [`docs/vitest-setup.md`](vitest-setup.md) and only cross-referenced here. A fifth job,
 > **`shell` (Shell lint)**, was also added later and — unlike `test` — is documented inline below (§3.1).
-> The local
+> A sixth job, **`dependency-review`**, was added later still (a PR-only supply-chain gate) and is
+> likewise documented inline (§3.1). The local
 > **Husky hooks** that CI mirrors have their own chronicle — see [`docs/husky-setup.md`](husky-setup.md).
 
 ---
@@ -81,7 +82,7 @@ It **relies on** config that already existed:
 
 | Job | Name (PR check) | Trigger | What it does |
 |---|---|---|---|
-| `verify` | **Lint, typecheck & build** | PR + push to `main` | `pnpm install --frozen-lockfile` → `pnpm biome ci` (read-only lint + format, emits GitHub annotations) → `pnpm build` (`tsc -b && vite build`). Mirrors the pre-commit Biome hook + the pre-push build. |
+| `verify` | **Lint, typecheck & build** | PR + push to `main` | `pnpm install --frozen-lockfile` → `pnpm cf-typegen:check` (fails if the committed worker types are stale vs `wrangler.jsonc`) → `pnpm biome ci` (read-only lint + format, emits GitHub annotations) → `pnpm build` (`tsc -b && vite build`). Mirrors the pre-commit Biome hook + the pre-push build. |
 | `secrets` | **Secret scan (gitleaks)** | PR + push to `main` | checkout with `fetch-depth: 0` (full history) → `gitleaks/gitleaks-action` with `GITHUB_TOKEN`. A deep backstop to the staged-file secretlint hook. |
 | `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
 | `test` | **Test (Vitest)** | PR + push to `main` | *Added later with the test harness — see [`docs/vitest-setup.md`](vitest-setup.md). Same setup block as `verify`, runs `pnpm test:run`.* |
@@ -214,6 +215,7 @@ action versions to whatever the live marketplace shows.
        node-version-file: .nvmrc
        cache: pnpm
    - run: pnpm install --frozen-lockfile
+   - run: pnpm cf-typegen:check         # committed worker types in sync with wrangler.jsonc
    - run: pnpm biome ci                 # read-only lint + format
    - run: pnpm build                    # tsc -b && vite build
    ```

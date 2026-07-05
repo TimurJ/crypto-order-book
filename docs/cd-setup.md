@@ -38,8 +38,8 @@ now, and to be the skeleton a Node/Python backend slots into later.
 |---|---|---|
 | Artifact strategy | **Build once, promote the same bytes** | PROD ships exactly what UAT signed off; no rebuild drift |
 | Env config | **Runtime, via `/config.js`** (not `VITE_*`) | `VITE_*` bakes at build time → would need a build per env, breaking build-once |
-| PROD trigger | **Tag `vX.Y.Z`** + required-reviewer gate | Auditable in git + a human stop; tag resolves to the pre-built artifact |
-| UAT trigger | **Tag `vX.Y.Z-rc.N`** (trunk-based) | No long-lived release branches; semver-aligned |
+| PROD trigger | **Tag `vX.Y.Z`** + required-reviewer gate + Environment tag policy | Auditable in git + a human stop; tag resolves to the pre-built artifact; a `v*.*.*` credential backstop to `classify` (§5) |
+| UAT trigger | **Tag `vX.Y.Z-rc.N`** (trunk-based) | No long-lived release branches; semver-aligned; the `uat` Environment restricts deploys to `v*.*.*-rc.*` tags (§5) |
 | Deploy tokens | **One per GitHub Environment** | Independently revocable; prod token only exposed to the gated prod job |
 | Wrangler in CI | **`pnpm exec wrangler`** (pinned dep) | Mirrors `pnpm biome ci` over `setup-biome` — no version drift vs the lockfile |
 | Deploy model | **Upload → smoke preview URL → promote to 100%** | Traffic is gated *behind* the smoke — a build that fails the smoke isn't promoted, so it serves no traffic (the live version keeps serving); replaces instant `wrangler deploy`. See §3.1. |
@@ -107,6 +107,9 @@ respectively), outside that original review.
 Tag deploys never rebuild — they resolve the main-build run for the tag's SHA
 (`gh run list --workflow cd.yml --commit <sha> --branch main`, fail loudly on ≠1 match) and
 `actions/download-artifact` it cross-run. Only `deploy-dev` shares a run with `build`.
+
+**Environment tag policies:** the `prod`/`uat` Environments additionally restrict deploys to `v*.*.*`
+/ `v*.*.*-rc.*` tags — a credential backstop to `classify`. Setup + rationale in §5.
 
 **Build provenance (SLSA):** right after `pnpm build`, the `build` job attests the bundle with
 `actions/attest` (`subject-path: dist/**/*`) — a Sigstore-signed SLSA build-provenance record of which
@@ -251,6 +254,23 @@ gh secret set CLOUDFLARE_API_TOKEN --env uat
 gh secret set CLOUDFLARE_API_TOKEN --env prod
 ```
 
+**Environment tag policies (prod + uat).** Beyond the reviewer gate, restrict *which refs* may
+deploy to each gated env — a credential-layer backstop to the `classify` job, so the prod/uat tokens
+can only be exercised by correctly-shaped release tags. GitHub's deployment-branch-policy (with
+`type: tag`, Ruby `File.fnmatch` patterns) does this, set from the Environment's settings page:
+
+Settings → Environments → **prod** → set **Deployment branches and tags** to **Selected branches and
+tags** → **Add deployment branch or tag rule** → **Ref type** = **Tag**, **Name pattern** = `v*.*.*`
+→ **Add rule**. Repeat on **uat** with `v*.*.*-rc.*`. (Required reviewers and the wait timer live on
+the same page.) Verify by confirming the rule now shows under *Deployment branches and tags*.
+
+Notes: `v*.*.*` also matches `…-rc.N` (a `*` glob can't exclude the suffix) — harmless, since
+`classify`'s `^v[0-9]+\.[0-9]+\.[0-9]+$` regex is the precise prod gate and the policy is only the
+coarse credential backstop. **`dev` is deliberately left open** — its Environment is shared by the PR
+`preview` job, so a branch/tag restriction there would block previews. **Wait timer:** intentionally
+none (the reviewer gate is the human stop for a solo maintainer); enable one on the same settings page
+if a change-window buffer is ever wanted.
+
 ---
 
 ## 6. First run & validation (what "done" looked like)
@@ -310,14 +330,32 @@ can't satisfy it, so unattended automation can't skip UAT by accident.
 
 **Local:** `pnpm deploy:dev|uat|prod` deploy by hand; `wrangler dev` runs the Worker + SPA locally.
 
-**Rollback:** every **upload** records a Worker version (the promote only shifts traffic to it), so
-roll back with `wrangler rollback` (per env), by promoting a known-good version directly
-(`wrangler versions deploy <prev-id>@100 --env <env> --yes`), or by re-running the deploy for a
-previous tag/commit's artifact. Rollback stays **manual** — the pre-promote smoke already blocks a
-build that fails to serve before any traffic, so an auto-revert was left out for simplicity (a fuller
-rollback runbook is a documented later step).
+**Rollback (runbook).** Every **upload** records a Worker version (the promote only shifts traffic to
+it), so a known-good version is always one command away. Rollback is **manual by design** — the
+pre-promote smoke already blocks a build that fails to serve *before* any traffic, so this is for
+issues that surface *after* promote (a runtime error, bad config, a regression), not for a failed
+deploy.
 
-**Branch protection:** `main` is Strict-protected (PR required, the 3 CI checks must pass, branch up
+1. **Primary path (known-good).** Find a good version, then re-promote it — this is exactly the
+   command CD's promote step runs:
+   ```bash
+   pnpm exec wrangler versions list --env prod          # or: --name crypto-order-book-prod
+   pnpm exec wrangler versions deploy <version-id>@100 --env prod --yes
+   ```
+2. **Shortcut.** `wrangler rollback` re-deploys a prior version in one step (no id ⇒ the version
+   *before* the latest; `--message` skips the interactive confirm). It targets the worker via
+   **`--name`, not `--env`**:
+   ```bash
+   pnpm exec wrangler rollback [<version-id>] --name crypto-order-book-prod --message "reason"
+   ```
+3. **Re-tag path.** Re-run the deploy for a previous good tag/commit — build-once means it reuses
+   that commit's `dist-<sha>` (no rebuild).
+4. **Verify** the cutover: `bash scripts/smoke.sh https://crypto-order-book-prod.timurjalilov1.workers.dev prod`.
+
+Swap `prod`/`crypto-order-book-prod` for uat/dev to roll those back. Auth locally via `wrangler login`
+or a `CLOUDFLARE_API_TOKEN` with `Workers Scripts:Edit`.
+
+**Branch protection:** `main` is Strict-protected (PR + the required CI checks must pass, branch up
 to date, enforced on admins). The CD checks are intentionally *not* required (they skip on PRs or
 depend on Cloudflare).
 
@@ -337,7 +375,10 @@ Documented as deliberate non-goals for v1; each slots into what exists:
   simplicity until real traffic warrants it.
 - **Custom domains** (replace the `workers.dev` URLs).
 - **HTMLRewriter SPA-shell** config variant (stream config into `index.html`, no extra round-trip).
-- **Vitest CD job** when tests land.
+- **Vitest CD job** — a deliberate non-goal. CI already runs the suite on every PR and push to
+  `main`; build-once-promote then ships that same `dist-<sha>` through UAT/PROD unchanged, so
+  re-running unit tests at promote time tests nothing the CI run didn't. Deploy-time verification is
+  `smoke.sh` — a different kind of check.
 - **Backend:** API routes via `run_worker_first: ["/api/*"]`, a Durable Object class for WS fan-out,
   or a Container for Python — each just adds bindings to the dev/uat/prod blocks already in
   `wrangler.jsonc`. **Caveat for that work:** the deploy jobs now use `versions upload`/`versions

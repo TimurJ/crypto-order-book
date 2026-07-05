@@ -171,7 +171,7 @@ For the full step-by-step setup history, the decisions, and the gotchas, see
 | Open / push to a PR | Preview | Ephemeral URL (a non-promoted version of the dev Worker), posted as a PR comment |
 | Merge to `main` | **DEV** | Auto-deploy |
 | Tag `vX.Y.Z-rc.N` | **UAT** | Release candidate |
-| Tag `vX.Y.Z` | **PROD** | Blocked on the prod Environment's required-reviewer approval |
+| Tag `vX.Y.Z` | **PROD** | Blocked on the prod Environment's required-reviewer approval; only deployable from `vX.Y.Z` tags (Environment tag policy) |
 
 ### Releasing — deploy to UAT / PROD
 
@@ -209,10 +209,11 @@ deployments” → check `prod` → Approve and deploy**. It promotes the same a
 > `v1.2.3-beta`) classifies as `none` and deploys nothing, and a version that isn't higher than the
 > latest release (a lower or duplicate number) is rejected by CI before any deploy.
 
-**Rollback:** every **upload** records a Worker version (the promote only shifts traffic to it) — roll
-back per env with `wrangler rollback`, promote a prior version
-(`wrangler versions deploy <prev-id>@100 --env <env> --yes`), or re-tag/redeploy a previous good
-commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
+**Rollback:** every **upload** records a Worker version (the promote only shifts traffic to it), so
+re-promoting a known-good version is one command away
+(`wrangler versions deploy <prev-id>@100 --env <env> --yes`). Full step-by-step in the
+[rollback runbook](docs/cd-setup.md#7-operating-it). Live URLs:
+`crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
 
 ### How it works (in brief)
 
@@ -227,7 +228,9 @@ commit. Live URLs: `crypto-order-book-{dev,uat,prod}.timurjalilov1.workers.dev`.
   (`window.__APP_CONFIG__`), read via [`src/lib/app-config.ts`](src/lib/app-config.ts); **never**
   put env config in `VITE_*` vars or `public/`.
 - **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
-  `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job.
+  `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job. Each
+  gated Environment also restricts *which tags* can deploy (prod `v*.*.*`, uat `v*.*.*-rc.*`), a
+  credential backstop on top of the tag classification (dev stays open — it's shared with `preview`).
 - **Traffic gated behind the smoke test** — each deploy `wrangler versions upload`s a new version
   (serving no traffic), runs [`scripts/smoke.sh`](scripts/smoke.sh) against that version's **preview
   URL** — asserting the security headers + SPA shell marker on `/` and `nosniff` + the right `env` in

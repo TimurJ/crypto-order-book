@@ -19,7 +19,6 @@ pmOnFail: download
 
 allowBuilds:
   esbuild: true
-  msw: false
   # Cloudflare's Workers runtime, used by `wrangler dev` for local simulation.
   workerd: true
   # Pulled transitively by miniflare for image-resizing emulation we don't use; skip the
