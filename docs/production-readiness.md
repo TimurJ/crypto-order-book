@@ -54,14 +54,13 @@ async errors (the real order-book risk) — that hardening lives in the WS/data 
   `max-age` — `.dev` is already preload-forced, so no `includeSubDomains`/`preload`)
 - [x] `worker/config-response.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
   Worker-generated responses (verified: `curl -I /config.js` shows nosniff but no CSP)
-- [x] CSP keeps **both** `script-src` and `style-src` a clean `'self'` (verified against
-  `public/_headers`/`dist/index.html`) — no `'unsafe-inline'` anywhere
+- [x] `script-src` is a clean `'self'` (the load-bearing lock; verified against
+  `public/_headers`/`dist/index.html`); `style-src` allows `'unsafe-inline'` for the order-book grid +
+  Base UI popup `<style>` injection — a deliberate, ~0-value-to-lock call (see the security-headers doc)
 - [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
   `wrangler dev` + `curl`
 - [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
       when endpoints diverge per env (a build-once `_headers` file is env-identical)
-- [x] Dropped `style-src 'unsafe-inline'`: the theme-provider's runtime `<style>` injection became a
-      bundled `.theme-transitions-off` class, so the CSP is now a strict `style-src 'self'`
 - [ ] **Deferred:** deep-link/SPA-fallback header coverage once a router lands
 
 **Architecture, decisions & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).

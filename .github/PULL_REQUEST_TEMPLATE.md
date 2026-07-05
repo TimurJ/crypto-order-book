@@ -7,7 +7,7 @@ messages carry the detail. Delete anything that doesn't apply; the summary is op
 
 ## Checklist
 
-- [ ] Conventional Commit title (`type(scope): summary`)
-- [ ] `pnpm build` and `pnpm test:run` pass locally
-- [ ] Docs updated if this is a major change (README + CLAUDE kept in sync)
-- [ ] No secrets committed
+- [x] Conventional Commit title (`type(scope): summary`)
+- [x] `pnpm build` and `pnpm test:run` pass locally
+- [x] Docs updated if this is a major change (README + CLAUDE kept in sync)
+- [x] No secrets committed

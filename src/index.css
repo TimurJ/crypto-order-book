@@ -131,14 +131,3 @@
     @apply font-sans;
     }
 }
-
-/* Theme-toggle transition suppression. Toggled on <html> by theme-provider.tsx during a theme swap
-   so colors snap instead of animating, then removed on a later frame. Replaces a runtime-injected
-   <style> so the CSP can keep a strict `style-src 'self'`. Mirrors the original's *,*::before,*::after
-   reach. See docs/security-headers-setup.md. */
-.theme-transitions-off,
-.theme-transitions-off *,
-.theme-transitions-off *::before,
-.theme-transitions-off *::after {
-  transition: none !important;
-}
