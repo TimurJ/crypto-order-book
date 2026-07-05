@@ -5,8 +5,8 @@ behind the config, the lint findings the migration surfaced (and how each was fi
 from-scratch recipe to reproduce it on the next project.
 
 > **Status:** live since **2026-06-27** (commit `3272902`, PR #1, branch `chore/biome-migration` — the
-> project's first tooling change). `biome.json` has not changed since, so the committed config *is* the
-> migration artifact.
+> project's first tooling change). `biome.json` has changed once since — PR #16 added the
+> generated-worker-types exclusion (see §2) — but is otherwise the migration artifact.
 >
 > This is the long-form history. The short versions live in [`README.md`](../README.md#tooling)
 > (how-to) and [`CLAUDE.md`](../CLAUDE.md#linting--formatting--biome) (rationale). Update those on
@@ -41,7 +41,7 @@ Two constraints shaped the migration:
 | Decision | Choice | Why |
 |---|---|---|
 | Version | **Biome `2.5.1`, pinned exact** (no caret) | A formatter's output must be deterministic across machines/CI; a caret bump could re-flow files |
-| Scope | **`.ts`/`.tsx` only** — `files.includes: ["**/*.{ts,tsx}", "!dist"]` | Deliberately excludes CSS/JSON: Biome has open upstream bugs parsing Tailwind v4 at-rules; Vite/Tailwind already own `src/index.css` |
+| Scope | **`.ts`/`.tsx` only** — `files.includes: ["**/*.{ts,tsx}", "!dist", "!worker/worker-configuration.d.ts"]` | Deliberately excludes CSS/JSON: Biome has open upstream bugs parsing Tailwind v4 at-rules; Vite/Tailwind already own `src/index.css`. The negation drops the generated worker types (added PR #16) |
 | Formatter | **Byte-identical to the old Prettier** | Faithful migration, zero reformat churn (mapping in §3.1) |
 | Linter rules | **`preset: "recommended"` + `domains.react: "recommended"`** | The modern key — *not* the deprecated `rules.recommended: true` (2.5.1 flags it) |
 | Import organizing | **`assist: { enabled: false }`** | No automatic import reordering (kept off deliberately) |
@@ -68,7 +68,7 @@ Everything below is commit `3272902`.
 
 **Added**
 
-- **`biome.json`** — the config (see §2; unchanged since).
+- **`biome.json`** — the config (see §2).
 - **`.vscode/extensions.json`** — recommends the `biomejs.biome` editor extension.
 - **`.vscode/settings.json`** — `editor.formatOnSave: true`, `codeActionsOnSave: { source.fixAll.biome:
   "explicit" }`, `[typescript]`/`[typescriptreact]` `defaultFormatter: biomejs.biome`, and

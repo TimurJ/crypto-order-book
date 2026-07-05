@@ -3,7 +3,7 @@
 A step-by-step record of how the test harness was added, the decisions behind it, the gotchas hit
 along the way, and a from-scratch recipe to reproduce it on the next project.
 
-> **Status:** live since **2026-06-28**. 4 tests green across 2 files; wired into the pre-push hook
+> **Status:** live since **2026-06-28**. 9 tests green across 5 files; wired into the pre-push hook
 > and a dedicated CI `test` job. Type-checked as part of `pnpm build`.
 >
 > This is the long-form history. The short versions live in
@@ -241,9 +241,11 @@ versions to whatever the registry shows is current — and **re-verify the Vites
 
 ## 8. Deferred / future
 
-- **MSW** (Mock Service Worker) for API/WebSocket mocking once the backend lands — note `msw: false`
-  already sits in `pnpm-workspace.yaml` `allowBuilds`, anticipating it.
+- **MSW** (Mock Service Worker) for API/WebSocket mocking once the backend lands — allow-list its
+  build in `pnpm-workspace.yaml` (`allowBuilds`) if pnpm flags one at that point.
 - **Playwright** (or Vitest browser mode) for end-to-end / real-browser tests.
 - **Coverage thresholds** (`test.coverage.thresholds`) + uploading the report in CI.
 - **`vitest --typecheck`** for type-level tests (`expectTypeOf`) when there's typed domain logic.
-- A **CD** smoke/test stage — `docs/cd-setup.md` §8's "Vitest CD job" idea, now that tests exist.
+- A **CD** unit-test stage — evaluated and dropped as redundant (CI already runs the suite;
+  build-once-promote ships the tested artifact unchanged; deploy-time checks are `smoke.sh`). See
+  `docs/cd-setup.md` §8.
