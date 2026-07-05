@@ -320,4 +320,6 @@ import { Button } from "@/components/ui/button"
 
 ## License
 
-This project is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+**Proprietary — all rights reserved.** This source is published for demonstration/portfolio
+purposes only; it is **not** open-source, and no permission is granted to use, copy, modify, or
+distribute it without prior written consent. See [`LICENSE`](LICENSE).

@@ -142,9 +142,11 @@ CI/security posture cleanly.
       ignore it (unlike `.env.example`, which was already allowlisted via `!.env.example`)
 
 ### 9. Minor ✅ DONE
-- [x] Add a `LICENSE` — **MIT** (`Copyright (c) 2026 Timur Jalilov`); canonical text so GitHub
-      detects it as MIT. Also added `license`/`author` metadata to `package.json` + a README
-      "License" section (the repo is public and was previously implicitly all-rights-reserved)
+- [x] Add a `LICENSE` — **proprietary / all rights reserved** (`Copyright (c) 2026 Timur Jalilov`);
+      source is public for portfolio/demo only, not open-source. `package.json` `license` is
+      `UNLICENSED` (npm's proprietary marker) + `author` metadata, with a matching README "License"
+      section. (Was initially MIT; switched to all-rights-reserved to block reuse/commercialization
+      while keeping the repo public.)
 - [x] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; supplies charset/LF/final-newline/
       2-space-indent defaults for CSS/JSON/MD/YAML, mirroring the Biome formatter)
 - [x] Add a PR template (`.github/PULL_REQUEST_TEMPLATE.md` — light checklist) + `CODEOWNERS`
