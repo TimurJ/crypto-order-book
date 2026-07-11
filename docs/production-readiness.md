@@ -116,7 +116,8 @@ CI/security posture cleanly.
 
 ### 7. Branding / HTML metadata ✅ DONE
 - [x] Replace the starter `vite.svg` favicon — `public/favicon.svg`, the Tabler **chart-histogram**
-      glyph (white on the app's primary teal `#007595`), referenced with `sizes="any"`. **SVG-only**
+      glyph (white on the base-mira `--chart-4` teal, hardcoded in `public/favicon.svg` with a
+      comment naming its source token), referenced with `sizes="any"`. **SVG-only**
       (not a full raster set — see deferred below)
 - [x] Remove the leftover starter asset `src/assets/react.svg` (orphaned, zero references)
 - [x] Add `<meta name="description">`, media-based light/dark `theme-color` (`#ffffff` / `#090b0c`

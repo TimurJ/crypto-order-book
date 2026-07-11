@@ -5,7 +5,7 @@ Guidance for working in this repository.
 ## Overview
 
 `crypto-order-book` — a React 19 + TypeScript single-page app built with Vite 8, Tailwind
-CSS v4, and shadcn/ui (the `base-lyra` style, which uses **Base UI** primitives — not Radix —
+CSS v4, and shadcn/ui (the `base-mira` style, which uses **Base UI** primitives — not Radix —
 and Tabler icons). Package manager is **pnpm**.
 
 > Status: **early scaffold**. The app currently renders the shadcn starter landing page
