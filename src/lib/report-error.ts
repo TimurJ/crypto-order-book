@@ -18,6 +18,8 @@ export interface ReportContext {
     | "react:recoverable"
     | "window:unhandledrejection"
     | "window:error"
+    | "ws:transport"
+    | "order-book:sync"
 }
 
 export function reportError(error: unknown, context: ReportContext = {}): void {
