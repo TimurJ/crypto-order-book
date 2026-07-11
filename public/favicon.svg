@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Crypto Order Book">
-  <!-- Glyph: Tabler "chart-histogram" (MIT, @tabler/icons-react) on the app's primary teal. -->
-  <rect width="32" height="32" rx="7" fill="#007595" />
+  <!-- Glyph: Tabler "chart-histogram" (MIT, @tabler/icons-react) on teal #00786f (the chart-4 token in src/index.css). -->
+  <rect width="32" height="32" rx="7" fill="#00786f" />
   <g transform="translate(4 4)" fill="none" stroke="#ffffff" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3 3v18h18" />
     <path d="M20 18v3" />

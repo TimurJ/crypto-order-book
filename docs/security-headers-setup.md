@@ -65,7 +65,7 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
   v33.1.1**, Feb 2025, and now uses `style.setProperty(…)`), and Base UI `CSPProvider disableStyleElements`
   / AG Grid's deprecated legacy CSS theme / a Worker-minted `styleNonce` all add wiring, deprecation, or
   infra cost for no real security.
-  - **Theme-provider `<style>`.** The base-lyra scaffold's `disableTransitionOnChange` (a
+  - **Theme-provider `<style>`.** The shadcn scaffold's `disableTransitionOnChange` (a
     next-themes-derived anti-flash) injects a transient `*{transition:none}` `<style>` during a theme
     swap so colors snap instead of animating, then removes it a frame later — see
     [`theme-provider.tsx`](../src/components/theme-provider.tsx). `'unsafe-inline'` permits it.
@@ -152,11 +152,11 @@ curl -sI http://localhost:8787/config.js  # nosniff + cache-control: no-store (a
 ```
 
 Then load the app, open devtools: **no CSP violations**, fonts/icons render (confirms `'self'` is
-sufficient), and toggling the theme (`d` key) shows no fade smear. Caveat: the default scaffold has
-no element that both transitions *and* changes appreciably between themes (the only transition,
-`button`'s `transition-all`, sits on `bg-primary`, which is teal in both themes), so the smear isn't
-really exercisable yet — see the `style-src` gotcha above for the proper cross-engine /
-pseudo-element check to run against real themed UI.
+sufficient), and toggling the theme (`d` key) shows no fade smear. With the current style, the
+starter `button`'s `transition-all` sits on `bg-primary`, which differs sharply between light and
+dark (re-verify `--primary` in `src/index.css` after any future style switch), so the button is a
+real element-level check: a broken `disableTransitionOnChange` would show a visible smear on it.
+The pseudo-element case remains untestable — see the `style-src` gotcha above.
 
 ## From scratch (recipe)
 
