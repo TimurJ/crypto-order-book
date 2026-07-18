@@ -156,6 +156,20 @@ Two corollaries:
 - **Expect a quiet first run.** Cooldown skips any dependency whose latest version published inside the
   7-day window, so the first pass may open fewer PRs than the dependency count suggests. Not a bug.
 
+**The `packageManager` pnpm pin is *outside* this cooldown.** Dependabot doesn't update the
+`packageManager` field at all ([dependabot-core#4830](https://github.com/dependabot/dependabot-core/issues/4830)),
+so the pnpm version is bumped by hand. Apply the **same 7-day cooldown manually**: pin only a pnpm
+release published **≥7 calendar days ago** (`npm view pnpm time --json`). This hand-rule counts
+*calendar* days for eyeball-ability — ~0.6 day looser than the *elapsed*-time measurement Dependabot
+uses above, an accepted trade-off for a manual check.
+
+> **Lesson (2026-07, worth recording):** the cooldown alone isn't enough — also confirm the target
+> **isn't deprecated** (`npm view pnpm@<version> deprecated`). pnpm **11.12.0 and 11.13.0 shipped
+> broken and were deprecated by the maintainers within days** (11.12.0 crashes the `pmOnFail:
+> download` self-manager, [pnpm#12959](https://github.com/pnpm/pnpm/issues/12959)); a blind "newest
+> ≥7-days-old" pick would have landed on the broken 11.12.0. We pinned **11.11.0** instead — aged,
+> never deprecated, and the maintainers' recommended fallback for that bug.
+
 ### 4.6 Other CI jobs on Dependabot PRs (verified fine)
 
 `verify`/`test` need no secrets; `pnpm install --frozen-lockfile` succeeds because Dependabot updates

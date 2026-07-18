@@ -68,7 +68,7 @@ Commit `cd2ff61` added three files (and one line to a fourth):
   Node major. **Gotcha (verified empirically):** on pnpm 11 `engines` *alone* only warns (the docs'
   "always fails" is wrong for this version); `engineStrict` is the switch, and it must live in
   `pnpm-workspace.yaml` — pnpm 11 reads only auth/registry from `.npmrc`, so `engine-strict` there is a no-op.
-- **`package.json`** — added `"packageManager": "pnpm@11.9.0"`, the single source for the pnpm version
+- **`package.json`** — added `"packageManager": "pnpm@11.11.0"`, the single source for the pnpm version
   (auto-detected by `pnpm/action-setup`, so the workflow names no pnpm version).
 
 It **relies on** config that already existed:
@@ -251,7 +251,11 @@ action versions to whatever the live marketplace shows.
 - **When it runs:** every pull request and every push to `main`. The `concurrency` group cancels a
   superseded run when you push again to the same PR/branch.
 - **Bumping versions:** change `.nvmrc` (Node) or the `packageManager` field (pnpm) — **not** the
-  workflow. CI picks them up automatically. **Bumping the Node major means changing `.nvmrc` *and*
+  workflow. CI picks them up automatically. **Pin pnpm only to a release published ≥7 calendar days
+  ago** (`npm view pnpm time --json`) **and not deprecated** (`npm view pnpm@<version> deprecated`) — a
+  manual mirror of Dependabot's cooldown, which can't gate the
+  `packageManager` field ([dependabot-core#4830](https://github.com/dependabot/dependabot-core/issues/4830));
+  see [`dependabot-setup.md`](dependabot-setup.md) §4.5. **Bumping the Node major means changing `.nvmrc` *and*
   `engines.node`** (the enforced gate) together — CI's `pnpm install` cross-checks them, so a mismatch
   fails loudly. Bump Biome by changing the pinned devDep; CI uses that copy.
 - **Branch protection:** `main` is **Strict**-protected — PRs only, the required CI checks must pass
