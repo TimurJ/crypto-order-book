@@ -6,9 +6,11 @@
 // (generated worker-configuration.d.ts) and the test project (DOM lib).
 //
 // `_headers` cannot set headers on this response (it's Worker-generated, not served by Static
-// Assets), so the one header that matters on a JS sub-resource — `nosniff` — is set here.
-// Document-level headers (CSP, frame-ancestors, …) are irrelevant on a script response and live
-// in public/_headers, which covers the static document + assets.
+// Assets), so the one header that matters on a JS sub-resource — `nosniff` — is set via the
+// shared noStoreResponse helper. Document-level headers (CSP, frame-ancestors, …) are irrelevant
+// on a script response and live in public/_headers, which covers the static document + assets.
+
+import { noStoreResponse } from "./no-store-response.ts"
 
 export interface RuntimeConfigEnv {
   APP_ENV: string
@@ -22,14 +24,8 @@ export function configResponse(env: RuntimeConfigEnv): Response {
     apiBaseUrl: env.API_BASE_URL,
     wsUrl: env.WS_URL,
   }
-  return new Response(`window.__APP_CONFIG__ = ${JSON.stringify(config)}`, {
-    headers: {
-      "content-type": "application/javascript; charset=utf-8",
-      // Differs per env and must never be cached at the edge/browser and outlive a deploy.
-      "cache-control": "no-store",
-      // `_headers` can't reach this Worker-generated response; set nosniff here so the script is
-      // never MIME-sniffed into another content type.
-      "x-content-type-options": "nosniff",
-    },
-  })
+  return noStoreResponse(
+    `window.__APP_CONFIG__ = ${JSON.stringify(config)}`,
+    "application/javascript; charset=utf-8"
+  )
 }

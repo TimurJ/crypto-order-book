@@ -29,9 +29,14 @@ logs; the value is that it's the single seam Sentry slots into later (see [Roadm
 | Unhandled promise rejection | `window` `unhandledrejection` listener | `reportError(…, "window:unhandledrejection")` |
 | Uncaught runtime / resource error | `window` `error` listener | `reportError(…, "window:error")` |
 | WebSocket transport error (socket `error` event, constructor throw, throwing subscriber) | the transport's own handlers ([`ws-transport-architecture.md`](ws-transport-architecture.md)) | `reportError(…, "ws:transport")` |
+| Failed query (after the retry policy is exhausted; once per query, not per observer) | `QueryCache.onError`, set in `createQueryClient()` ([`tanstack-query-setup.md`](tanstack-query-setup.md)) | `reportError(…, "query:cache")` + the failing `queryKey` in `ReportContext` |
+| Failed mutation | `MutationCache.onError` (same factory) | `reportError(…, "query:mutation")` |
 
 `ReportContext` also reserves `"order-book:sync"` for the part-2 sync layer — add its row here
-when that layer lands.
+when that layer lands. The optional `queryKey` field (populated by the query channel) maps onto
+Sentry's `extra` when the swap happens. Known double-report: a query opting into `throwOnError`
+reports from both the cache seam and the boundary, with distinct `source` tags — informative,
+not a bug.
 
 Source: `src/components/root-error-boundary.tsx` (boundary + fallback), `src/lib/report-error.ts`
 (the seam), `src/main.tsx` (the `createRoot` hooks + `window` listeners),
@@ -88,8 +93,9 @@ trading view.
 When a router is added, give each route its own boundary so a broken route keeps the shell/nav alive.
 - TanStack Router: `errorComponent` / `defaultErrorComponent` / `CatchBoundary`. React Router:
   `errorElement`.
-- **Not** `QueryErrorResetBoundary` — that's a TanStack **Query** primitive, and the project isn't
-  running Query.
+- **Not** `QueryErrorResetBoundary` — that's a TanStack **Query** primitive for resetting query
+  error state, not a route boundary (it belongs to the suspense-posture roadmap in
+  [`tanstack-query-setup.md`](tanstack-query-setup.md)).
 - **Depends on:** a router being chosen.
 
 ### Sentry adoption

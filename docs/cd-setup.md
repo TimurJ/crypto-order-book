@@ -28,7 +28,8 @@ now, and to be the skeleton a Node/Python backend slots into later.
   - We hand-roll CD in GitHub Actions on purpose (to learn it), which neutralizes Vercel's main
     edge (its git-deploy magic). AWS's ops overhead (IAM/VPC/ALB/Fargate) isn't worth it yet.
 - **Workers Static Assets**, not Pages — Cloudflare's recommended path for new SPAs; assets + Worker
-  deploy as one unit, and the Worker is the seam for `/config.js` (and later `/api/*`).
+  deploy as one unit, and the Worker is the seam for `/config.js` and `/api/*` (`/api/health`
+  today; more API routes later).
 
 ---
 
@@ -59,18 +60,30 @@ respectively), outside that original review.
   separate Worker script (`crypto-order-book-{dev,uat,prod}`). Top-level `main`, `assets`,
   `compatibility_date`, and `observability` **inherit** to every env (only bindings/`vars` are
   non-inheritable, so `vars` is repeated per env). `assets`: `directory: ./dist`, `binding: ASSETS`,
-  `not_found_handling: single-page-application`, `run_worker_first: ["/config.js"]`. **Workers Logs**
+  `not_found_handling: single-page-application`, `run_worker_first: ["/config.js", "/api/*"]`
+  (the `/api/*` namespace is routed worker-first; `/api/health` is its first route). **Workers Logs**
   are on via a single top-level `"observability": { "enabled": true }` (logs are **off by default**) —
   verified inherited by all three envs: a contrastive dry-run warns only that top-level `vars` "is not
   inherited", never `observability`.
 - **`worker/index.ts`** — a thin Worker. For `/config.js` it returns JS setting
-  `window.__APP_CONFIG__` from the env's `vars`, with `Cache-Control: no-store`. Everything else
+  `window.__APP_CONFIG__` from the env's `vars`, with `Cache-Control: no-store`. For `/api/health`
+  (`worker/health-response.ts`, extracted for unit-testability like `config-response.ts`) it returns
+  JSON `{ "status": "ok", "env": <APP_ENV>, "now": <server ISO time> }` — the hosting
+  implementation of the platform-neutral health contract consumed by the SPA's query layer
+  ([`tanstack-query-setup.md`](tanstack-query-setup.md)). Any **other** `/api/*` path gets a JSON
+  **404** (`worker/not-found-response.ts`) — `run_worker_first` makes the namespace the Worker's
+  responsibility, and falling through would serve the SPA fallback's `index.html` at 200, masking
+  broken routes. All three Worker-generated responses build their headers (`no-store` + `nosniff`;
+  Worker-generated ⇒ `_headers` can't reach them) through one shared helper,
+  `worker/no-store-response.ts`. The `runtimeConfig` Vite plugin serves local twins of all three
+  routes in `pnpm dev` **and** `pnpm preview`. Everything else
   falls through to `env.ASSETS.fetch(request)` (SPA fallback to `index.html`). Future API/DO/Container
-  routes branch here. Uses `export default { fetch }` (a Worker requirement).
+  routes branch alongside `/api/health`. Uses `export default { fetch }` (a Worker requirement).
 - **Runtime config plumbing:**
   - `vite.config.ts` → a `runtimeConfig` plugin that (a) injects `<script src="/config.js">` into
-    `index.html` via `transformIndexHtml` (so it's never bundled), and (b) serves `/config.js` with
-    local defaults in `pnpm dev` via `configureServer`.
+    `index.html` via `transformIndexHtml` (so it's never bundled), and (b) serves exact-matched
+    local twins of the Worker's routes (`/config.js`, `/api/health`, the `/api/*` 404) in both
+    `pnpm dev` and `pnpm preview` via `configureServer` + `configurePreviewServer`.
   - `src/lib/app-config.ts` → typed `getConfig()` / `AppConfig` + the `window.__APP_CONFIG__`
     global declaration. The app reads config only from here.
 - **`tsconfig.worker.json`** — type-checks `worker/` (no DOM lib) against runtime types generated into
@@ -132,7 +145,12 @@ previous version keeps serving. The smoke goes past a `200`: on the document (`/
 `public/_headers` security headers (CSP, `nosniff`, `X-Frame-Options`, `Referrer-Policy`,
 `Permissions-Policy`, HSTS) and a stable SPA shell marker (`<title>Crypto Order Book</title>`), and on
 the Worker-generated `/config.js` (a different code path than the static assets) it asserts `nosniff`
-and `"env":"<env>"` — proving the *right* environment's config is live. It does **not** echo the exact
+and `"env":"<env>"` — proving the *right* environment's config is live — and on `/api/health` it
+asserts `nosniff`, `"status":"ok"`, and `"env":"<env>"`, proving the `/api/*` namespace is really
+routed to the Worker per env (the substrings are pinned by `worker/health-response.test.ts`, so the
+smoke and the unit test can't drift apart). It also asserts an **unmatched** `/api/*` path returns
+a JSON `404` with `nosniff` + `"error":"not_found"` (pinned by `worker/not-found-response.test.ts`) — proving
+the Worker, not the SPA fallback, answers the whole namespace. It does **not** echo the exact
 Cloudflare version id from the response (that would need a `version_metadata` binding — a possible
 future enhancement, e.g. a Sentry release tag); but the pre-promote smoke targets the
 *version-specific* preview URL (whose hostname *is* the uploaded version id), so it's inherently
@@ -394,7 +412,8 @@ Documented as deliberate non-goals for v1; each slots into what exists:
   `main`; build-once-promote then ships that same `dist-<sha>` through UAT/PROD unchanged, so
   re-running unit tests at promote time tests nothing the CI run didn't. Deploy-time verification is
   `smoke.sh` — a different kind of check.
-- **Backend:** API routes via `run_worker_first: ["/api/*"]`, a Durable Object class for WS fan-out,
+- **Backend:** more API routes under the already-routed `/api/*` namespace (`/api/health` pioneered
+  it — new routes branch beside it in `worker/index.ts`), a Durable Object class for WS fan-out,
   or a Container for Python — each just adds bindings to the dev/uat/prod blocks already in
   `wrangler.jsonc`. **Caveat for that work:** the deploy jobs now use `versions upload`/`versions
   deploy`, which **cannot apply Durable Object migrations** (migrations are atomic — Cloudflare

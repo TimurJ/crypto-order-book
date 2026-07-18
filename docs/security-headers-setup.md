@@ -16,9 +16,11 @@ Two coordinated pieces, split along a hard coverage boundary (see below):
   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
   `Strict-Transport-Security`. Vite copies `public/_headers` → `dist/_headers` at build; wrangler
   deploys `dist/`.
-- **[`worker/config-response.ts`](../worker/config-response.ts)** — sets `X-Content-Type-Options:
-  nosniff` on the `/config.js` response, because `_headers` provably cannot reach it (it's
-  Worker-generated). The other headers are document-level and irrelevant on a script response.
+- **[`worker/no-store-response.ts`](../worker/no-store-response.ts)** — the shared builder every
+  Worker-generated response goes through (`/config.js`, `/api/health`, the unmatched-`/api/*`
+  404). It sets `X-Content-Type-Options: nosniff` (+ `cache-control: no-store`), because
+  `_headers` provably cannot reach Worker-generated responses. The other headers are
+  document-level and irrelevant on script/JSON responses.
 
 The CSP today:
 
@@ -161,9 +163,12 @@ The pseudo-element case remains untestable — see the `style-src` gotcha above.
 2. Derive the CSP from the build: read `dist/index.html` for script/style origins, inventory any
    remote fonts/images/iframes, and list real `connect-src` endpoints. Default to `default-src 'self'`,
    `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`.
-3. For any route your Worker generates (here, `/config.js` under `run_worker_first`), set its headers
-   **in the Worker** — `_headers` won't apply. At minimum `X-Content-Type-Options: nosniff`.
-4. Add a test for the Worker-set headers (see `worker/config-response.test.ts` + the test-wiring
+3. For any route your Worker generates (here, `/config.js`, `/api/health`, and the
+   unmatched-`/api/*` 404 under `run_worker_first`), set its headers
+   **in the Worker** — `_headers` won't apply. At minimum `X-Content-Type-Options: nosniff`;
+   share one builder (`worker/no-store-response.ts`) so the routes can't drift.
+4. Add a test for the Worker-set headers (see `worker/config-response.test.ts` /
+   `worker/health-response.test.ts` / `worker/not-found-response.test.ts` + the test-wiring
    notes in [`docs/vitest-setup.md`](vitest-setup.md)).
 5. Verify with `wrangler dev` + `curl -I` as above; grade a deployed URL with the tools listed.
 

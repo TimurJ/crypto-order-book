@@ -3,9 +3,11 @@
 A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and shadcn/ui.
 
 > **Status: early scaffold.** The app shell and theming are in place (the starter landing
-> page with light/dark mode). The first domain subsystem — a resilient WebSocket transport
-> (`src/lib/connection/`) — has landed; the order-book sync + rendering layers on top of it
-> are not implemented yet. The full CI **and** CD pipeline is live: every push deploys across
+> page with light/dark mode). Two domain subsystems have landed: a resilient WebSocket
+> transport (`src/lib/connection/`) and the server-state/REST layer (TanStack Query v5,
+> `src/lib/query/`, with the Worker's first API route, `/api/health`, as its demo consumer);
+> the order-book sync + rendering layers on top of them are not implemented yet. The full CI
+> **and** CD pipeline is live: every push deploys across
 > DEV/UAT/PROD on Cloudflare Workers (see [Deployment](#deployment-cloudflare-workers)).
 > The repo also serves as a **reference foundation** for future projects — every subsystem is
 > chronicled in [`docs/`](docs/).
@@ -22,6 +24,9 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md))
 - A hand-rolled **resilient WebSocket transport** with automatic reconnection (see
   [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md))
+- **TanStack Query v5** for REST/server-state (factory-configured client, typed HTTP errors,
+  `queryOptions` modules per resource; see
+  [`docs/tanstack-query-setup.md`](docs/tanstack-query-setup.md))
 - **Biome** for linting & formatting
 - **Vitest** + **React Testing Library** (jsdom) for unit / component tests
 - **pnpm** for package management
@@ -76,7 +81,8 @@ For the full migration history, the decisions, and the gotchas, see [`docs/biome
 
 Tests run on **[Vitest](https://vitest.dev)** with **React Testing Library** in a jsdom environment.
 Config is in `vitest.config.ts` (it extends `vite.config.ts`); tests live beside the code they cover
-as `*.test.ts(x)`.
+as `*.test.ts(x)`. Components that fetch via TanStack Query render through `renderWithClient`
+(`src/test/render-with-client.tsx`), which provides a fresh isolated query client per test.
 
 ```bash
 pnpm test          # watch mode
@@ -167,8 +173,9 @@ environments — **DEV**, **UAT**, **PROD** — driven by
 [`.github/workflows/cd.yml`](.github/workflows/cd.yml). Config lives in
 [`wrangler.jsonc`](wrangler.jsonc), with three named environments (each its own Worker script:
 `crypto-order-book-{dev,uat,prod}`). A thin Worker ([`worker/index.ts`](worker/index.ts)) serves
-the SPA's static assets plus the per-environment runtime config, and is where API routes and
-Durable Object / Container bindings will attach later.
+the SPA's static assets, the per-environment runtime config, and the `/api/*` namespace
+(`/api/health` today; unmatched `/api/*` paths return a JSON 404 rather than the SPA fallback),
+and is where further API routes and Durable Object / Container bindings will attach later.
 
 For the full step-by-step setup history, the decisions, and the gotchas, see
 [`docs/cd-setup.md`](docs/cd-setup.md).
@@ -242,8 +249,10 @@ re-promoting a known-good version is one command away
   credential backstop on top of the tag classification (dev stays open — it's shared with `preview`).
 - **Traffic gated behind the smoke test** — each deploy `wrangler versions upload`s a new version
   (serving no traffic), runs [`scripts/smoke.sh`](scripts/smoke.sh) against that version's **preview
-  URL** — asserting the security headers + SPA shell marker on `/` and `nosniff` + the right `env` in
-  `/config.js`, not just a `200` — and only then promotes it to 100% (`wrangler versions deploy
+  URL** — asserting the security headers + SPA shell marker on `/`, `nosniff` + the right `env` in
+  `/config.js`, a healthy `/api/health` for the right env, and a JSON `404` (with `nosniff`) for an
+  unmatched `/api/*` path, not just a `200` — and only then
+  promotes it to 100% (`wrangler versions deploy
   <id>@100 --yes`), so a build that **fails the smoke** is never promoted and the previous version
   keeps serving. The same script re-checks the live URL to confirm the cutover.
 - **Workers Logs on** — `observability` is enabled in [`wrangler.jsonc`](wrangler.jsonc) (off by
@@ -268,8 +277,9 @@ Cloudflare boundary:
 
 - [`public/_headers`](public/_headers) — applied by Static Assets to the document + bundled assets
   (Vite copies it to `dist/`). This is where the CSP and `frame-ancestors` actually matter.
-- [`worker/config-response.ts`](worker/config-response.ts) — sets `nosniff` on `/config.js`, because
-  Cloudflare's `_headers` does **not** apply to Worker-generated responses.
+- [`worker/no-store-response.ts`](worker/no-store-response.ts) — the shared builder that sets
+  `nosniff` (+ `no-store`) on every Worker-generated response (`/config.js`, `/api/health`, the
+  `/api` 404), because Cloudflare's `_headers` does **not** apply to Worker-generated responses.
 
 Verify locally:
 

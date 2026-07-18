@@ -12,6 +12,8 @@
 // Future API routes / Durable Object + Container bindings branch here before the ASSETS fallback.
 
 import { configResponse, type RuntimeConfigEnv } from "./config-response.ts"
+import { healthResponse } from "./health-response.ts"
+import { apiNotFoundResponse } from "./not-found-response.ts"
 
 interface Env extends RuntimeConfigEnv {
   ASSETS: Fetcher
@@ -26,6 +28,19 @@ export default {
     // run_worker_first in wrangler.jsonc.
     if (url.pathname === "/config.js") {
       return configResponse(env)
+    }
+
+    // First /api/* route (run_worker_first covers the namespace). Consumed by the SPA's
+    // health query and asserted by scripts/smoke.sh before every promote. Future API/DO/
+    // Container routes branch here alongside it.
+    if (url.pathname === "/api/health") {
+      return healthResponse(env)
+    }
+
+    // run_worker_first claims the whole /api/* namespace, so unmatched paths must 404 here —
+    // falling through would hand them to the SPA fallback, which serves index.html at 200.
+    if (url.pathname.startsWith("/api/")) {
+      return apiNotFoundResponse(url.pathname)
     }
 
     // Static assets, with SPA fallback to index.html (assets.not_found_handling in wrangler.jsonc).

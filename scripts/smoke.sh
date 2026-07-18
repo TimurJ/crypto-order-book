@@ -53,4 +53,26 @@ grep -qiE '^x-content-type-options: *nosniff' "$hdr" \
 grep -qF "\"env\":\"$env\"" "$body" \
   || { echo "::error::/config.js env mismatch: expected \"env\":\"$env\" at $base"; exit 1; }
 
+# --- /api/health: the Worker's first /api/* route (run_worker_first), consumed by the SPA's ---
+# --- health query — asserts the API namespace is really routed to the Worker, per env      ---
+curl "${curl_opts[@]}" -D "$hdr" -o "$body" "$base/api/health"
+grep -qiE '^x-content-type-options: *nosniff' "$hdr" \
+  || { echo "::error::missing nosniff on $base/api/health"; exit 1; }
+grep -qF '"status":"ok"' "$body" \
+  || { echo "::error::/api/health not ok at $base"; exit 1; }
+grep -qF "\"env\":\"$env\"" "$body" \
+  || { echo "::error::/api/health env mismatch: expected \"env\":\"$env\" at $base"; exit 1; }
+
+# --- unmatched /api/*: the Worker must answer the whole worker-first namespace itself with a ---
+# --- JSON 404 — never fall through to the SPA fallback's index.html at 200                   ---
+# No --fail here: 404 is the EXPECTED status, and --fail would abort on it (exit 22). -D captures
+# the headers so we can assert nosniff too — the 404 runs through noStoreResponse like the others.
+code="$(curl -sS --retry 3 --retry-delay 3 -D "$hdr" -o "$body" -w '%{http_code}' "$base/api/__smoke_not_found__")"
+[ "$code" = "404" ] \
+  || { echo "::error::expected 404 for unmatched /api/* at $base (got $code)"; exit 1; }
+grep -qiE '^x-content-type-options: *nosniff' "$hdr" \
+  || { echo "::error::missing nosniff on unmatched /api/* at $base"; exit 1; }
+grep -qF '"error":"not_found"' "$body" \
+  || { echo "::error::unmatched /api/* body missing \"error\":\"not_found\" at $base"; exit 1; }
+
 echo "Smoke OK ($env): $base"
