@@ -278,13 +278,12 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
 
 - **Entry:** `index.html` (`#root`) → `src/main.tsx`, which guards the root element (no `!`
   assertion) and mounts `<ThemeProvider><App /></ThemeProvider>`.
-- **Theming:** split across two files (deliberately, to satisfy the strict Fast-Refresh
-  rule):
-  - `src/components/theme-provider.tsx` — the `ThemeProvider` component (only export). Toggles
-    a `.dark` class on the root element, persists to `localStorage`, detects the system theme,
-    and toggles light/dark on the **`d`** keypress.
-  - `src/components/theme-context.ts` — `ThemeProviderContext`, the `useTheme` hook, and the
-    `Theme` type (`"dark" | "light" | "system"`). Consume theme state via `useTheme()`.
+- **Theming:** class-based dark mode — `ThemeProvider` (`src/components/theme-provider.tsx`)
+  toggles `.dark` on the root element; consume state via `useTheme()` from
+  `src/components/theme-context.ts` (the two-file split satisfies the strict Fast-Refresh rule).
+  Persistence, system-theme reactivity, the **`d`** keybind, cross-tab sync, and the anti-flash
+  swap — which **requires the CSP's `style-src 'unsafe-inline'`** — are chronicled in
+  [`docs/theming-architecture.md`](docs/theming-architecture.md).
 - **UI:** shadcn components live in `src/components/ui/` (`button.tsx` wraps
   `@base-ui/react`, styled with `class-variance-authority`). `cn()` in `src/lib/utils.ts`
   merges classes (`clsx` + `tailwind-merge`).

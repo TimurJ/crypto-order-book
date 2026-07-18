@@ -42,6 +42,7 @@ Two constraints shaped the migration:
 |---|---|---|
 | Version | **Biome `2.5.1`, pinned exact** (no caret) | A formatter's output must be deterministic across machines/CI; a caret bump could re-flow files |
 | Scope | **`.ts`/`.tsx` only** — `files.includes: ["**/*.{ts,tsx}", "!dist", "!worker/worker-configuration.d.ts"]` | Deliberately excludes CSS/JSON: Biome has open upstream bugs parsing Tailwind v4 at-rules; Vite/Tailwind already own `src/index.css`. The negation drops the generated worker types (added PR #16) |
+| Everything outside that scope | **`.editorconfig`** owns the editor defaults for CSS/JSON/MD/YAML | Mirrors the formatter for the files Biome deliberately excludes, so the whole tree stays consistent without widening Biome's scope (concrete defaults + the `[*.md]` exemption: recipe step 6) |
 | Formatter | **Byte-identical to the old Prettier** | Faithful migration, zero reformat churn (mapping in §3.1) |
 | Linter rules | **`preset: "recommended"` + `domains.react: "recommended"`** | The modern key — *not* the deprecated `rules.recommended: true` (2.5.1 flags it) |
 | Import organizing | **`assist: { enabled: false }`** | No automatic import reordering (kept off deliberately) |
@@ -189,10 +190,14 @@ Assumes a Vite + React + TS project currently on ESLint + Prettier.
 5. **Editor integration:** `.vscode/extensions.json` recommending `biomejs.biome`; `.vscode/settings.json`
    with `formatOnSave`, `source.fixAll.biome: "explicit"`, per-language `defaultFormatter`, and
    `[css].formatOnSave: false`. Allow it through `.gitignore` (`!.vscode/settings.json`).
-6. **Run `pnpm check`** and **fix every finding in code** — split mixed-export modules, drop redundant
+6. **Pair it with `.editorconfig`** for everything outside Biome's ts/tsx scope: mirror the
+   formatter's defaults (utf-8, LF, final newline, trim trailing whitespace, 2-space indent) under
+   `[*]`, and exempt `[*.md]` from trailing-whitespace trimming (two trailing spaces are a Markdown
+   hard break).
+7. **Run `pnpm check`** and **fix every finding in code** — split mixed-export modules, drop redundant
    default exports, guard non-null assertions, add the `node:` import protocol. Reach for a scoped
    `overrides` only for vendored code; avoid per-line `biome-ignore`.
-7. **Confirm `pnpm lint` exits 0** with zero diagnostics.
+8. **Confirm `pnpm lint` exits 0** with zero diagnostics.
 
 ---
 
