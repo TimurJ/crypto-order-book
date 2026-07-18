@@ -3,9 +3,12 @@
 A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and shadcn/ui.
 
 > **Status: early scaffold.** The app shell and theming are in place (the starter landing
-> page with light/dark mode). Order-book functionality is not implemented yet — but the full
-> CI **and** CD pipeline is live: every push deploys across DEV/UAT/PROD on Cloudflare Workers
-> (see [Deployment](#deployment-cloudflare-workers)).
+> page with light/dark mode). The first domain subsystem — a resilient WebSocket transport
+> (`src/lib/connection/`) — has landed; the order-book sync + rendering layers on top of it
+> are not implemented yet. The full CI **and** CD pipeline is live: every push deploys across
+> DEV/UAT/PROD on Cloudflare Workers (see [Deployment](#deployment-cloudflare-workers)).
+> The repo also serves as a **reference foundation** for future projects — every subsystem is
+> chronicled in [`docs/`](docs/).
 
 ## Tech stack
 
@@ -16,6 +19,8 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
   **Tabler** icons
 - **react-error-boundary** for a top-level error boundary + a central error-reporting seam (see
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md))
+- A hand-rolled **resilient WebSocket transport** with automatic reconnection (see
+  [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md))
 - **Biome** for linting & formatting
 - **Vitest** + **React Testing Library** (jsdom) for unit / component tests
 - **pnpm** for package management
@@ -119,7 +124,10 @@ Every action the two workflows call is pinned to a **full commit SHA** (`@<sha> 
 retagged action can't change what runs — Dependabot bumps the SHA and its comment on its weekly run.
 
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
-`package.json`, so local, hooks, and CI all run the same versions. The Node major is **enforced**, not
+`package.json`, so local, hooks, and CI all run the same versions. When bumping the pnpm pin, choose a
+release published **≥7 calendar days ago** (`npm view pnpm time --json`) **and not deprecated**
+(`npm view pnpm@<version> deprecated`) — a manual stand-in for Dependabot's cooldown, which can't
+update that field. The Node major is **enforced**, not
 just advised — an `engines.node: ">=24 <25"` gate (with `engineStrict: true` in `pnpm-workspace.yaml`)
 makes `pnpm install` hard-fail on Node 22/26, on every machine and in CI.
 

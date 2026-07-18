@@ -241,8 +241,10 @@ versions to whatever the registry shows is current — and **re-verify the Vites
 
 ## 8. Deferred / future
 
-- **MSW** (Mock Service Worker) for API/WebSocket mocking once the backend lands — allow-list its
-  build in `pnpm-workspace.yaml` (`allowBuilds`) if pnpm flags one at that point.
+- **MSW** (Mock Service Worker) for **HTTP/API** mocking once the backend lands — allow-list its
+  build in `pnpm-workspace.yaml` (`allowBuilds`) if pnpm flags one at that point. WebSocket mocking
+  at the transport layer is already solved without it by the hand-rolled `FakeWebSocket` — the
+  rationale lives in [`ws-transport-architecture.md`](ws-transport-architecture.md#testing).
 - **Playwright** (or Vitest browser mode) for end-to-end / real-browser tests.
 - **Coverage thresholds** (`test.coverage.thresholds`) + uploading the report in CI.
 - **`vitest --typecheck`** for type-level tests (`expectTypeOf`) when there's typed domain logic.

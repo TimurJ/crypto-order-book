@@ -4,9 +4,12 @@ A grounded audit of what `crypto-order-book` still needs to be production-ready,
 actual state of the repo (source, both CI/CD workflows, wrangler/vite config, gitignore).
 
 > **Status context:** This is still an **early scaffold** — `src/App.tsx` is the shadcn starter
-> page and there's no order-book domain code yet. The tooling/CI/CD foundation (Biome, git hooks,
-> GitHub Actions, three-env Cloudflare CD) is strong. The single most important "production-ready"
-> need is the actual app; everything below is the foundation to lay before/alongside the features.
+> page. The first domain subsystem (the reconnecting WebSocket transport, `src/lib/connection/` —
+> see [`docs/ws-transport-architecture.md`](ws-transport-architecture.md)) has landed; the
+> order-book sync + rendering layers on top of it are still pending. The tooling/CI/CD foundation
+> (Biome, git hooks, GitHub Actions, three-env Cloudflare CD) is strong. The single most important
+> "production-ready" need is the actual app; everything below is the foundation to lay
+> before/alongside the features.
 
 Items are ordered by impact. Tier 1 closes real holes; Tier 2 is production operations; Tier 3 is
 polish.
@@ -45,7 +48,9 @@ runs locally (watch/UI/coverage), on pre-push, and in CI as a distinct check.
 **Why:** `main.tsx` mounted `<ThemeProvider><App/></ThemeProvider>` with no error boundary — any
 render-time throw white-screened the whole app with no recovery. The boundary closes that for the React
 tree, and the seam is the natural hook point for error reporting (#4). Note a boundary **can't** catch
-async errors (the real order-book risk) — that hardening lives in the WS/data layer (see the doc's roadmap).
+async errors (the real order-book risk) — that hardening lives in the WS/data layer: the transport half
+is delivered (see the status note above); the frame-validation half is the part-2 sync layer (see the
+error-handling doc's roadmap).
 
 ### 3. Security headers ✅ DONE
 - [x] `public/_headers` (→ `dist/_headers`) sets the full set on the document + assets:
@@ -60,7 +65,10 @@ async errors (the real order-book risk) — that hardening lives in the WS/data 
 - [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
   `wrangler dev` + `curl`
 - [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
-      when endpoints diverge per env (a build-once `_headers` file is env-identical)
+      when endpoints diverge per env (a build-once `_headers` file is env-identical). The consumer
+      of those origins — the WS transport — is in place
+      ([`docs/ws-transport-architecture.md`](ws-transport-architecture.md)); this unblocks when
+      `vars.WS_URL` gets real values
 - [ ] **Deferred:** deep-link/SPA-fallback header coverage once a router lands
 
 **Architecture, decisions & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
