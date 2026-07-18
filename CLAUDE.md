@@ -139,7 +139,7 @@ Design decisions:
   setup-biome action with `version: latest` would risk drift.
 - **Single source of truth for versions.** Node via `.nvmrc` (`24`), consumed by setup-node's
   `node-version-file` and by `nvm use`; pnpm via `package.json`'s `packageManager` field
-  (`pnpm@11.9.0`), auto-detected by `pnpm/action-setup@v6` so the workflow hardcodes no pnpm version.
+  (`pnpm@11.11.0`), auto-detected by `pnpm/action-setup@v6` so the workflow hardcodes no pnpm version.
   `.nvmrc` *selects* which Node 24.x runs; a separate **`engines`/`engineStrict` gate enforces** it
   (`pnpm install` fails on any other major, so local/CI can't drift onto Node 22/26) — full mechanism
   and the pnpm-11 gotcha in the Node-lock entry under Conventions.
@@ -363,6 +363,11 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   `COREPACK_ENABLE_STRICT` env var; don't reintroduce any of them. Its non-default values don't
   download: `error` fails on a version mismatch, `warn` warns and continues, `ignore` skips the check.
   CI is unaffected: `pnpm/action-setup` provisions pnpm from the same field, never Corepack.
-  **Bump pnpm** by editing the `packageManager` field.
+  **Bump pnpm** by editing the `packageManager` field — but only to a release published to npm
+  **≥7 calendar days ago** (`npm view pnpm time --json`) **and not deprecated**
+  (`npm view pnpm@<version> deprecated`): a by-hand mirror of Dependabot's 7-day cooldown, which
+  can't cover this field
+  ([dependabot-core#4830](https://github.com/dependabot/dependabot-core/issues/4830)). Details + the
+  incident behind the not-deprecated check: [`docs/dependabot-setup.md`](docs/dependabot-setup.md) §4.5.
 - **Keep docs in sync:** on any **major change** (tooling, architecture, a new subsystem,
   scripts/hooks), update **both `README.md` and `CLAUDE.md`** in the same change.

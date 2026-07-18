@@ -119,7 +119,10 @@ Every action the two workflows call is pinned to a **full commit SHA** (`@<sha> 
 retagged action can't change what runs — Dependabot bumps the SHA and its comment on its weekly run.
 
 Node is pinned via [`.nvmrc`](.nvmrc) (run `nvm use`) and pnpm via the `packageManager` field in
-`package.json`, so local, hooks, and CI all run the same versions. The Node major is **enforced**, not
+`package.json`, so local, hooks, and CI all run the same versions. When bumping the pnpm pin, choose a
+release published **≥7 calendar days ago** (`npm view pnpm time --json`) **and not deprecated**
+(`npm view pnpm@<version> deprecated`) — a manual stand-in for Dependabot's cooldown, which can't
+update that field. The Node major is **enforced**, not
 just advised — an `engines.node: ">=24 <25"` gate (with `engineStrict: true` in `pnpm-workspace.yaml`)
 makes `pnpm install` hard-fail on Node 22/26, on every machine and in CI.
 
