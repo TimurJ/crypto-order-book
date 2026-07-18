@@ -31,16 +31,16 @@ logs; the value is that it's the single seam Sentry slots into later (see [Roadm
 | WebSocket transport error (socket `error` event, constructor throw, throwing subscriber) | the transport's own handlers ([`ws-transport-architecture.md`](ws-transport-architecture.md)) | `reportError(…, "ws:transport")` |
 | Failed query (after the retry policy is exhausted; once per query, not per observer) | `QueryCache.onError`, set in `createQueryClient()` ([`tanstack-query-setup.md`](tanstack-query-setup.md)) | `reportError(…, "query:cache")` + the failing `queryKey` in `ReportContext` |
 | Failed mutation | `MutationCache.onError` (same factory) | `reportError(…, "query:mutation")` |
+| Order-book sync failure (malformed/schema-failing frame, snapshot fetch failure, continuity gap, buffer overflow, throwing store subscriber) | the sync engine's handlers ([`order-book-sync-architecture.md`](order-book-sync-architecture.md) — full failure-mode matrix) | `reportError(…, "order-book:sync")` |
 
-`ReportContext` also reserves `"order-book:sync"` for the part-2 sync layer — add its row here
-when that layer lands. The optional `queryKey` field (populated by the query channel) maps onto
-Sentry's `extra` when the swap happens. Known double-report: a query opting into `throwOnError`
-reports from both the cache seam and the boundary, with distinct `source` tags — informative,
-not a bug.
+The optional `queryKey` field (populated by the query channel) maps onto Sentry's `extra` when
+the swap happens. Known double-report: a query opting into `throwOnError` reports from both the
+cache seam and the boundary, with distinct `source` tags — informative, not a bug.
 
 Source: `src/components/root-error-boundary.tsx` (boundary + fallback), `src/lib/report-error.ts`
 (the seam), `src/main.tsx` (the `createRoot` hooks + `window` listeners),
-`src/lib/connection/ws-transport.ts` (the transport channel).
+`src/lib/connection/ws-transport.ts` (the transport channel), `src/lib/order-book/` (the sync
+channel).
 
 ## Architecture decisions
 
@@ -65,9 +65,9 @@ risk surface. A malformed WebSocket frame handled in `onmessage` never reaches a
 So the real resilience work for the order book is **not** an error-boundary task — it lives in the
 WebSocket / data layer: validate the frame, `try/catch` the parse/reducer, then make a decision —
 drop the frame, resync, or reconnect. A boundary catching a render crash that resulted from bad state
-reaching the store is cleanup *after* the loss. The first piece of that layer now exists — the
-reconnecting transport (see [WS-layer hardening](#ws-layer-hardening) below); the
-validate/drop/resync half is the part-2 sync layer.
+reaching the store is cleanup *after* the loss. That layer now exists in full — the
+reconnecting transport plus the part-2 sync engine's validate/drop/resync half (see
+[WS-layer hardening](#ws-layer-hardening) below).
 
 What's implemented today therefore hardens the **React tree**. The order-book data hardening is a
 separate, larger piece (see [WS-layer hardening](#ws-layer-hardening) below). The seam between them is
@@ -114,10 +114,13 @@ The real order-book data resilience — separate from, and bigger than, the Reac
 - **Reconnect** with backoff — **delivered** by the transport layer (full-jitter backoff,
   connect timeout, opt-in staleness watchdog, errors via `reportError("ws:transport")`); see
   [`ws-transport-architecture.md`](ws-transport-architecture.md).
-- Validate every frame (a zod schema or a hand-rolled guard) and `try/catch` the parse/reducer —
-  the part-2 **sync layer** (`"order-book:sync"` is already reserved in `ReportContext`).
-- Decide per failure: **drop** the frame or **resync** (refetch the snapshot) — also part 2.
-- Surface fatal widget failures via `showBoundary`; log non-fatal ones via `reportError`.
+- Validate every frame + `try/catch` the parse — **delivered** by the part-2 sync engine
+  (zod before anything touches the buffer or book, reporting via `"order-book:sync"`).
+- Decide per failure: **drop** (self-healing via the continuity check) or **resync**
+  (in place, over the live socket) — **delivered**; the full matrix is in
+  [`order-book-sync-architecture.md`](order-book-sync-architecture.md).
+- Surface fatal widget failures via `showBoundary`; log non-fatal ones via `reportError` —
+  the remaining piece, owned by part 3 (there is no widget yet to surface into).
 
 ## References
 

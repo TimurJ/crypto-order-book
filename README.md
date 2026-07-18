@@ -2,15 +2,16 @@
 
 A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and shadcn/ui.
 
-> **Status: early scaffold.** The app shell and theming are in place (the starter landing
-> page with light/dark mode). Two domain subsystems have landed: a resilient WebSocket
-> transport (`src/lib/connection/`) and the server-state/REST layer (TanStack Query v5,
-> `src/lib/query/`, with the Worker's first API route, `/api/health`, as its demo consumer);
-> the order-book sync + rendering layers on top of them are not implemented yet. The full CI
-> **and** CD pipeline is live: every push deploys across
-> DEV/UAT/PROD on Cloudflare Workers (see [Deployment](#deployment-cloudflare-workers)).
-> The repo also serves as a **reference foundation** for future projects — every subsystem is
-> chronicled in [`docs/`](docs/).
+> **Status: data layer live, UI pending.** The app shell and theming are in place (the
+> starter landing page with light/dark mode). Three domain subsystems have landed: a
+> resilient WebSocket transport (`src/lib/connection/`), the server-state/REST layer
+> (TanStack Query v5, `src/lib/query/`, with the Worker's first API route, `/api/health`,
+> as its demo consumer), and the **Binance order-book sync layer** (`src/lib/order-book/`)
+> — a live, self-healing local order book proven by a console demo (open DevTools on any
+> non-prod env); the rendering layer on top of it is next. The full CI **and** CD pipeline is live:
+> every push deploys across DEV/UAT/PROD on Cloudflare Workers (see
+> [Deployment](#deployment-cloudflare-workers)). The repo also serves as a **reference
+> foundation** for future projects — every subsystem is chronicled in [`docs/`](docs/).
 
 ## Tech stack
 
@@ -24,6 +25,9 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md))
 - A hand-rolled **resilient WebSocket transport** with automatic reconnection (see
   [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md))
+- A **Binance order-book sync engine** on top of it (spec-exact snapshot + diff-stream
+  stitching with gap-detection self-healing, zod-validated payloads; see
+  [`docs/order-book-sync-architecture.md`](docs/order-book-sync-architecture.md))
 - **TanStack Query v5** for REST/server-state (factory-configured client, typed HTTP errors,
   `queryOptions` modules per resource; see
   [`docs/tanstack-query-setup.md`](docs/tanstack-query-setup.md))
@@ -290,9 +294,11 @@ curl -sI http://localhost:8787/config.js  # nosniff + no-store from the Worker (
 ```
 
 > **`connect-src` / `style-src` are project-specific** — `_headers` ships unchanged to all three
-> envs (build-once-promote), so per-env exchange `wss://` origins will eventually push the CSP into
-> the Worker. `script-src` stays a strict `'self'`; `style-src` is `'self' 'unsafe-inline'` for the
-> order-book grid + Base UI popup `<style>` injection (locking it is ~0-value).
+> envs (build-once-promote); `connect-src` lists the order-book layer's Binance market-data hosts,
+> which works statically because they're deliberately env-identical (if origins ever differ per
+> env, the CSP moves into the Worker). `script-src` stays a strict `'self'`; `style-src` is
+> `'self' 'unsafe-inline'` for the order-book grid + Base UI popup `<style>` injection (locking it
+> is ~0-value).
 > Rationale, the HSTS-on-`.dev` nuance, and the roadmap: [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
 
 ## Commit messages

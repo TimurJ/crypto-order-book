@@ -8,7 +8,12 @@ describe("getConfig", () => {
   })
 
   it("returns the local fallback when window.__APP_CONFIG__ is unset", () => {
-    expect(getConfig()).toEqual({ env: "local", apiBaseUrl: "", wsUrl: "" })
+    expect(getConfig()).toEqual({
+      env: "local",
+      apiBaseUrl: "",
+      wsUrl: "",
+      binanceRestUrl: "",
+    })
   })
 
   it("returns the injected runtime config when present", () => {
@@ -16,11 +21,13 @@ describe("getConfig", () => {
       env: "prod",
       apiBaseUrl: "https://api.example.com",
       wsUrl: "wss://stream.example.com",
+      binanceRestUrl: "https://data.example.com",
     }
     expect(getConfig()).toEqual({
       env: "prod",
       apiBaseUrl: "https://api.example.com",
       wsUrl: "wss://stream.example.com",
+      binanceRestUrl: "https://data.example.com",
     })
   })
 })

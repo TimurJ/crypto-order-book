@@ -5,9 +5,11 @@
 // carrying the status code the retry predicate narrows on (query-client.ts).
 //
 // Deliberately dumb — no base URL, no timeout, no schema validation (see
-// docs/tanstack-query-setup.md for why zod is deferred to the first third-party API).
-// Richer clients (the future Binance REST handler) should subclass HttpError so the
-// `status < 500` retry check keeps working on their errors.
+// docs/tanstack-query-setup.md — third-party payloads are schema-parsed at their own
+// client boundary instead, e.g. order-book/binance-schemas.ts).
+// Richer clients that need error bodies subclass HttpError so the `status < 500` retry
+// check keeps working on their errors — BinanceHttpError (order-book/binance-rest.ts) is
+// the live example.
 
 export class HttpError extends Error {
   readonly status: number

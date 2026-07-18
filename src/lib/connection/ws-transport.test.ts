@@ -1,59 +1,7 @@
+import { FakeWebSocket, socketAt } from "@/test/fake-web-socket.ts"
+import { silenceConsoleError } from "@/test/silence-console-error.ts"
 import type { WsTransport, WsTransportOptions } from "./ws-transport.ts"
 import { createWsTransport } from "./ws-transport.ts"
-
-type FakeEvent = { data?: string }
-type FakeHandler = (event: FakeEvent) => void
-
-class FakeWebSocket {
-  static instances: FakeWebSocket[] = []
-
-  readonly url: string
-  // Unlike a real socket, close() emits nothing — tests fire simulateClose()
-  // where the browser would.
-  readonly close = vi.fn()
-  private handlers = new Map<string, FakeHandler[]>()
-
-  constructor(url: string) {
-    this.url = url
-    FakeWebSocket.instances.push(this)
-  }
-
-  addEventListener(type: string, handler: FakeHandler) {
-    const list = this.handlers.get(type) ?? []
-    list.push(handler)
-    this.handlers.set(type, list)
-  }
-
-  private emit(type: string, event: FakeEvent = {}) {
-    for (const handler of this.handlers.get(type) ?? []) {
-      handler(event)
-    }
-  }
-
-  simulateOpen() {
-    this.emit("open")
-  }
-
-  simulateMessage(data: string) {
-    this.emit("message", { data })
-  }
-
-  simulateClose() {
-    this.emit("close")
-  }
-
-  simulateError() {
-    this.emit("error")
-  }
-}
-
-const socketAt = (index: number): FakeWebSocket => {
-  const socket = FakeWebSocket.instances[index]
-  if (!socket) {
-    throw new Error(`no FakeWebSocket at index ${index}`)
-  }
-  return socket
-}
 
 const expectReconnectAfter = (delay: number, count: number) => {
   vi.advanceTimersByTime(delay - 1)
@@ -73,10 +21,6 @@ const expectForceCloseAfter = (
   expect(socket.close).toHaveBeenCalledTimes(1)
   expect(transport.getState().status).toBe("reconnecting")
 }
-
-// Silences the console noise reportError emits on error-path tests.
-const silenceConsoleError = () =>
-  vi.spyOn(console, "error").mockImplementation(() => {})
 
 // Fresh counter per call — a shared one would leave later tests throw-less.
 const stubThrowingOnceWebSocket = () => {

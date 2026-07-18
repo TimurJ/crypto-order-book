@@ -10,6 +10,7 @@ describe("configResponse", () => {
       APP_ENV: "prod",
       API_BASE_URL: "",
       WS_URL: "",
+      BINANCE_REST_URL: "",
     })
 
     expect(res.headers.get("x-content-type-options")).toBe("nosniff")
@@ -22,6 +23,7 @@ describe("configResponse", () => {
       APP_ENV: "dev",
       API_BASE_URL: "https://api.example.com",
       WS_URL: "wss://stream.example.com",
+      BINANCE_REST_URL: "https://data.example.com",
     })
 
     const body = await res.text()
@@ -29,5 +31,6 @@ describe("configResponse", () => {
     expect(body).toContain('"env":"dev"')
     expect(body).toContain('"apiBaseUrl":"https://api.example.com"')
     expect(body).toContain('"wsUrl":"wss://stream.example.com"')
+    expect(body).toContain('"binanceRestUrl":"https://data.example.com"')
   })
 })

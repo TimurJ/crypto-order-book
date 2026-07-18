@@ -15,10 +15,11 @@ its own idiom and copies everything else unchanged.
 that must be live (order-book depth, tickers) belongs to the WebSocket layer
 ([`ws-transport-architecture.md`](ws-transport-architecture.md)); anything cacheable and
 fetch-shaped (exchange metadata, health, later account data) belongs here. The one REST call
-that looks like an exception — the future Binance depth *snapshot* — is deliberately **not**
-routed through Query: it's an imperatively-timed step inside the sync handshake that must
-always be fresh, so caching semantics are actively harmful there. It will call the future
-Binance REST client directly.
+that looks like an exception — the Binance depth *snapshot* — is deliberately **not** routed
+through Query: it's an imperatively-timed step inside the sync handshake that must always be
+fresh, so caching semantics are actively harmful there. The sync engine calls
+`fetchDepthSnapshot` (`src/lib/order-book/binance-rest.ts`) directly, exactly as planned —
+see [`order-book-sync-architecture.md`](order-book-sync-architecture.md).
 
 ## What's implemented today
 
@@ -87,9 +88,11 @@ browser is offline (`fetchStatus: 'paused'`, not an error) and resumes on reconn
 
 - **`HttpError extends Error`** with a readonly `status`. A *class* because the retry
   predicate narrows with `instanceof`; message carries status + URL but **never the response
-  body** (unbounded; may embed arbitrary server output into logs). Richer clients (the future
-  Binance REST handler, which needs the error-code JSON bodies) should **subclass `HttpError`**
-  so `status < 500` keeps working on their errors.
+  body** (unbounded; may embed arbitrary server output into logs). Richer clients that need
+  the error-code JSON bodies **subclass `HttpError`** so `status < 500` keeps working on
+  their errors — `BinanceHttpError` (`src/lib/order-book/binance-rest.ts`) is the live
+  example: it captures Binance's `{ code, msg }` off the error body into fields while
+  inheriting the message/status contract.
 - **`ParseError extends Error`** — the *other* typed failure mode: HTTP succeeded but the body
   isn't JSON (a misrouted path serving HTML, a `204`, a truncated body). Deterministic, so the
   retry predicate never retries it. The original `SyntaxError` rides along as `cause` (kept out
@@ -102,14 +105,18 @@ browser is offline (`fetchStatus: 'paused'`, not an error) and resumes on reconn
   Deliberately absent: base URL, timeout, response-type branching, schema validation. It's a
   transport primitive; features own their protocols (the same layering as the ws-transport).
 
-**Why no zod (yet):** `fetchJson<T>`'s cast is a compile-time label checked against nothing —
-an honest lie. Runtime validation is worth its cost exactly when the data source can drift
-independently of this repo. Our only consumer is our own same-repo endpoint (client and server
-change in one PR), so schema ceremony buys nothing. **House rule: same-origin/own-backend
-responses may trust the cast; any third-party response must be schema-parsed in its
-`queryOptions` module** (`const parsed = Schema.parse(await fetchJson<unknown>(…))` — the
-parse failure then flows through the normal error machinery, and the TS type comes from the
-schema for free). zod enters the repo with the Binance layer, where it has a real job.
+**Why no zod in `fetchJson`:** `fetchJson<T>`'s cast is a compile-time label checked against
+nothing — an honest lie. Runtime validation is worth its cost exactly when the data source can
+drift independently of this repo. Query's only consumer is our own same-repo endpoint (client
+and server change in one PR), so schema ceremony buys nothing there. **House rule:
+same-origin/own-backend responses may trust the cast; any third-party response must be
+schema-parsed at its client boundary** — in a `queryOptions` module for Query-routed resources
+(`const parsed = Schema.parse(await fetchJson<unknown>(…))` — the parse failure then flows
+through the normal error machinery, and the TS type comes from the schema for free). zod
+**entered the repo with the order-book layer** exactly on this rule: Binance payloads are
+parsed in `src/lib/order-book/binance-schemas.ts` (see
+[`order-book-sync-architecture.md`](order-book-sync-architecture.md)); `fetchJson` itself
+stays schema-free.
 
 ### 4. Error reporting: cache-level `onError` → `reportError()`
 
@@ -212,8 +219,12 @@ last-known-good display, degraded line only with no data) → mounted in `App.ts
   fully deterministic — how `App.test.tsx` avoids network entirely).
 - **Layered mocking:** component tests seed the cache or mock at the queryFn level (no network
   concepts); the transport seam (`fetch-json.test.ts`) and one end-to-end case per feature
-  mock `globalThis.fetch` itself. **MSW deferred** until real third-party endpoints exist
-  (Binance) — it also fakes fetch, one layer lower, so adopting it invalidates nothing.
+  mock `globalThis.fetch` itself. **MSW stays deferred — deliberately re-decided when the
+  Binance layer (its original trigger) landed:** the sync engine's tests need exact control
+  over *when* the snapshot resolves relative to buffered stream frames, which deferred-promise
+  fetch doubles give directly and an always-async network interceptor obscures (the same
+  timing rationale that kept MSW out of the ws-transport suite). It remains the right tool if
+  request/response-shaped REST surface grows; adopting it later invalidates nothing.
 - **Error-state tests hit the reporting seam** — `vi.spyOn(console, "error")` silences the
   noise *and* asserts reporting fired (test the seam, don't suppress it).
 - **No fake timers around queries** — retries/gc/interval internals interact badly with
@@ -240,12 +251,12 @@ PRs do; a human bumping one by hand bumps both).
 
 | Deferred | Trigger |
 |---|---|
-| zod validation | first third-party API (Binance layer) — parse in the resource's `queryOptions` module |
-| MSW | real endpoints worth intercepting (Binance layer) |
+| ~~zod validation~~ | **done** — landed with the order-book layer (`binance-schemas.ts`); Query-routed third-party resources parse in their `queryOptions` module per the house rule |
+| MSW | re-deferred at the Binance layer (deterministic-timing rationale above); revisit if request/response-shaped REST surface grows |
 | Key factories | first feature with a *family* of keys invalidated together |
 | `useSuspenseQuery` | per-widget error-boundary work (route-level data) |
 | `mutations` defaults | first real mutation |
-| 429/`Retry-After`/418 handling | the Binance REST client — exchange-grade rate-limit logic does not belong in generic defaults |
+| ~~429/`Retry-After`/418 handling~~ | **done** — in the sync engine's snapshot retry loop (30s floor after 429/418), not in generic Query defaults, exactly as planned |
 | Sentry | swap `reportError`'s body; `queryKey` maps onto `extra` |
 
 ## Reuse recipe (for the next project)
