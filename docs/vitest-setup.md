@@ -3,7 +3,7 @@
 A step-by-step record of how the test harness was added, the decisions behind it, the gotchas hit
 along the way, and a from-scratch recipe to reproduce it on the next project.
 
-> **Status:** live since **2026-06-28**. 9 tests green across 5 files; wired into the pre-push hook
+> **Status:** live since **2026-06-28**. 51 tests green across 10 files; wired into the pre-push hook
 > and a dedicated CI `test` job. Type-checked as part of `pnpm build`.
 >
 > This is the long-form history. The short versions live in
@@ -148,7 +148,8 @@ too-old Vitest won't install. *Fix:* checked the live registry first —
 *Cause:* `mergeConfig(viteConfig, …)` assumes the imported default export is a resolved config
 **object**. If `vite.config.ts` exported a **function** (`defineConfig(({ mode }) => …)`), the merge
 would choke. *Fix:* confirmed this repo's config is object-form — `export default defineConfig({ … })`
-— and the `runtimeConfig` plugin branches dev-only *inside* its `configureServer` hook, not via a
+— and the `runtimeConfig` plugin keeps its server-only behaviour *inside* its `configureServer`/
+`configurePreviewServer` hooks (neither runs under Vitest), not via a
 config callback. Safe. (If it were function-form, you'd call it or lift the plugin array out.)
 
 ### 4.4 jest-dom has a Vitest-specific entry point
@@ -234,6 +235,13 @@ versions to whatever the registry shows is current — and **re-verify the Vites
 - **No mocking for `<App />`:** `getConfig()` (`src/lib/app-config.ts`) falls back to
   `{ env: "local", … }` when `window.__APP_CONFIG__` is unset — the jsdom case — so components render
   against that fallback without stubbing.
+- **Query harness** (added with the TanStack Query layer): components that call `useQuery` render
+  via `renderWithClient` (`src/test/render-with-client.tsx`) — a fresh per-test client built by
+  `createTestQueryClient` (`src/test/query-client.ts`) from the *real* app factory with `retry:
+  false` (no backoff waits in error tests) + `gcTime: Infinity` (no post-teardown gc timers). Seed
+  the cache before mount (`client.setQueryData`) for fetch-free determinism — `src/App.test.tsx` is
+  the reference. Mocking layers, the console-spy-the-seam move, and the no-fake-timers rule:
+  [`tanstack-query-setup.md`](tanstack-query-setup.md) §Testing recipe.
 - **Convention:** assert via roles/text (RTL), not implementation details.
 - **Branch protection:** after the CI `test` job runs once on a PR, add it to `main`'s required checks.
 
@@ -241,7 +249,10 @@ versions to whatever the registry shows is current — and **re-verify the Vites
 
 ## 8. Deferred / future
 
-- **MSW** (Mock Service Worker) for **HTTP/API** mocking once the backend lands — allow-list its
+- **MSW** (Mock Service Worker) for **HTTP/API** mocking once real third-party endpoints exist
+  (the Binance layer) — until then, tests mock `globalThis.fetch` / seed the query cache (see
+  [`tanstack-query-setup.md`](tanstack-query-setup.md) §Testing recipe; MSW also just fakes fetch
+  one layer lower, so adopting it later invalidates nothing). Allow-list its
   build in `pnpm-workspace.yaml` (`allowBuilds`) if pnpm flags one at that point. WebSocket mocking
   at the transport layer is already solved without it by the hand-rolled `FakeWebSocket` — the
   rationale lives in [`ws-transport-architecture.md`](ws-transport-architecture.md#testing).

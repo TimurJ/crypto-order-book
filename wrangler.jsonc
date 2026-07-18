@@ -31,8 +31,8 @@
     // Unmatched routes fall back to index.html so client-side routing works.
     "not_found_handling": "single-page-application",
     // Guarantee the Worker — not the SPA fallback — handles these dynamic routes regardless of
-    // how the request is classified. `/api/*` slots in here when the backend lands.
-    "run_worker_first": ["/config.js"]
+    // how the request is classified. /api/* is Worker territory (first route: /api/health).
+    "run_worker_first": ["/config.js", "/api/*"]
   },
 
   // `vars` are non-inheritable, so they're declared per environment. Env-specific config is

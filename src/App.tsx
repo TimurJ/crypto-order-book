@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { HealthStatus } from "@/features/health/health-status.tsx"
 import { getConfig } from "@/lib/app-config.ts"
 
 export function App() {
@@ -17,7 +18,7 @@ export function App() {
           <span className="rounded bg-muted px-1.5 py-0.5 text-foreground">
             {env}
           </span>{" "}
-          · (Press <kbd>d</kbd> to toggle dark mode)
+          · <HealthStatus /> · (Press <kbd>d</kbd> to toggle dark mode)
         </div>
       </div>
     </div>

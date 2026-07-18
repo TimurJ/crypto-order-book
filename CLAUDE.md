@@ -9,10 +9,12 @@ CSS v4, and shadcn/ui (the `base-mira` style, which uses **Base UI** primitives 
 and Tabler icons). Package manager is **pnpm**.
 
 > Status: **early scaffold**. The app currently renders the shadcn starter landing page
-> (`src/App.tsx`) with theming wired up. The first domain subsystem — the **WebSocket transport**
-> (`src/lib/connection/`, part 1 of the connection stack) — has landed; the order-book sync +
-> rendering layers are pending. The CI **and** CD pipelines are **live** — three-env Cloudflare
-> Workers deploy (DEV/UAT/PROD), build-once-promote verified. `main` is branch-protected.
+> (`src/App.tsx`) with theming wired up. Two domain subsystems have landed: the **WebSocket
+> transport** (`src/lib/connection/`, part 1 of the connection stack) and the **server-state /
+> REST layer** (**TanStack Query v5**, `src/lib/query/`, with the Worker's first `/api/*` route,
+> `/api/health`, as its demo consumer); the order-book sync + rendering layers are pending. The
+> CI **and** CD pipelines are **live** — three-env Cloudflare Workers deploy (DEV/UAT/PROD),
+> build-once-promote verified. `main` is branch-protected.
 >
 > This repo doubles as the **reference foundation** for future standalone projects: every major
 > subsystem gets a `docs/<name>-{setup,architecture}.md` chronicle (decisions, gotchas, reuse
@@ -80,6 +82,11 @@ Config is `vitest.config.ts`; tests live beside the code they cover as `*.test.t
   expansion** — so the test patterns are enumerated.
 - **No mocking for `<App />`:** `getConfig()` falls back to `{ env: "local", … }` when
   `window.__APP_CONFIG__` is unset; assert via roles/text (RTL), not implementation details.
+- **Query harness:** any component touching `useQuery` renders via `renderWithClient`
+  (`src/test/render-with-client.tsx`) — a fresh per-test client from the real factory with
+  `retry: false` + `gcTime: Infinity` (`src/test/query-client.ts`); seed the cache
+  (`client.setQueryData`) before mount for fetch-free determinism (how `App.test.tsx` works).
+  Recipe + mocking layers: [`docs/tanstack-query-setup.md`](docs/tanstack-query-setup.md).
 
 **Full setup, gotchas, and a from-scratch recipe:** [`docs/vitest-setup.md`](docs/vitest-setup.md)
 (keep it updated when the setup itself changes).
@@ -180,9 +187,11 @@ updated when the setup itself changes).
 CD lives in `.github/workflows/cd.yml` and deploys to **Cloudflare Workers** (Static Assets) across
 three environments. Config is `wrangler.jsonc`: three **named environments** (`[env.dev/uat/prod]`),
 each a separate Worker script (`crypto-order-book-{dev,uat,prod}`). Deploys always pass `--env`.
-The thin Worker `worker/index.ts` serves static assets + per-env `/config.js` (`run_worker_first:
-["/config.js"]`); future API/DO/Container bindings attach to the env blocks (`/api/*` slots into
-`run_worker_first` when the backend lands).
+The thin Worker `worker/index.ts` serves static assets + per-env `/config.js` and `/api/health`
+(`run_worker_first: ["/config.js", "/api/*"]` — the `/api/*` namespace is Worker territory, so
+unmatched `/api/*` paths get a JSON **404** from the Worker, never the SPA fallback's
+`index.html`); future API/DO/Container bindings attach to the env blocks and branch alongside
+`/api/health`.
 
 Triggers: **PR** → ephemeral preview URL (a non-promoted `wrangler versions upload --env dev`,
 posted as a PR comment); **merge to `main`** → DEV; **tag `vX.Y.Z-rc.N`** → UAT; **tag `vX.Y.Z`** →
@@ -191,8 +200,9 @@ a **deployment tag policy** (prod `v*.*.*`, uat `v*.*.*-rc.*`).
 
 Each deploy job gates traffic **behind** the smoke test: `wrangler versions upload` stages a new
 version (routing no traffic), `scripts/smoke.sh` asserts that version's **preview URL** serves the
-security headers + SPA shell marker on `/` and `nosniff` + the right `env` in `/config.js` (not just a
-`200`), then `wrangler versions deploy <id>@100 --yes` promotes it and the same script re-checks the
+security headers + SPA shell marker on `/`, `nosniff` + the right `env` in `/config.js`,
+`"status":"ok"` + the right `env` on `/api/health` (not just a `200`), and a JSON `404` (with
+`nosniff`) for an unmatched `/api/*` path, then `wrangler versions deploy <id>@100 --yes` promotes it and the same script re-checks the
 live URL — so a build that fails the smoke is never promoted (build-once preserved: upload uses the
 downloaded artifact, no rebuild). `scripts/smoke.sh` is shared by both checks and lint-covered by CI's
 `shell` job. The `build` job also **attests SLSA build provenance** for `dist-<sha>` (`actions/attest`),
@@ -292,13 +302,20 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   which keys off the `.dark` class the theme provider toggles.
 - **Path alias:** `@/*` → `src/*` (root `tsconfig.json` `paths` + `vite.config.ts`).
 - **Hosting / Worker:** `worker/index.ts` is a thin Cloudflare Worker (its own runtime, no DOM).
-  It serves the SPA's static assets (`env.ASSETS`) and the per-env `/config.js`. `wrangler.jsonc`
+  It serves the SPA's static assets (`env.ASSETS`), the per-env `/config.js`, and the first
+  `/api/*` route, `/api/health` (`worker/health-response.ts` — JSON `{ status, env, now }`,
+  smoke-asserted before every promote); unmatched `/api/*` paths return a JSON **404**
+  (`worker/not-found-response.ts`) instead of falling through to the SPA fallback. All
+  Worker-generated responses share one header builder (`worker/no-store-response.ts` —
+  `no-store` + `nosniff`). The `runtimeConfig` Vite plugin serves local twins of all three
+  routes in `pnpm dev` **and** `pnpm preview`. `wrangler.jsonc`
   defines the three envs (see [CD](#cd--cloudflare-workers)). `vite build` does **not** bundle the
   Worker — **wrangler** does, at deploy time.
 - **Runtime config:** env-specific values reach the client at runtime via `/config.js`
   (`window.__APP_CONFIG__`), never `import.meta.env`. The Worker serves it per-env in deployed
   builds; a Vite plugin (`runtimeConfig` in `vite.config.ts`) both injects the
-  `<script src="/config.js">` into `index.html` (so it's never bundled) and serves it in `pnpm dev`.
+  `<script src="/config.js">` into `index.html` (so it's never bundled) and serves it in
+  `pnpm dev` / `pnpm preview`.
   Read config through `src/lib/app-config.ts` (`getConfig()` / `AppConfig`).
 - **Connection layer (part 1 of 3):** `src/lib/connection/ws-transport.ts` — an app-generic
   reconnecting WebSocket transport (full-jitter backoff, connect timeout, **opt-in** staleness
@@ -307,6 +324,16 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   **single-use** (`destroy()` is terminal) — consumers must follow the doc's consumer contract.
   **Full architecture, consumer contract, verified spec nuances & reuse recipe:**
   [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md).
+- **Server-state / REST layer:** **TanStack Query v5**. `createQueryClient()`
+  (`src/lib/query/query-client.ts`) owns the defaults (30s `staleTime`, never-retry-4xx/
+  never-retry-`ParseError` predicate) and the `QueryCache`/`MutationCache` → `reportError()`
+  seam; `fetchJson`/`HttpError`/`ParseError` (`src/lib/query/fetch-json.ts`) turn non-ok HTTP
+  and unparseable 2xx bodies into typed throws. House rules: every resource
+  is a `queryOptions()` module in its feature dir (no inline keys/fns in components — see
+  `src/features/health/`), queryFns always forward `signal`, `useQuery` posture (suspense
+  deferred), Query is for request/response state — streaming stays on the WS layer. Devtools
+  plain-imported in `main.tsx` (self-excluded from prod). **Full decisions, contract, testing
+  recipe & reuse steps:** [`docs/tanstack-query-setup.md`](docs/tanstack-query-setup.md).
 - **Error handling:** a root error boundary (`RootErrorBoundary`, `src/components/root-error-boundary.tsx`,
   built on **`react-error-boundary`**) wraps the app in `src/main.tsx`; every error channel funnels through
   one **Sentry-ready** seam, `reportError()` in `src/lib/report-error.ts` (a one-line swap later). React 19's
@@ -315,7 +342,8 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
 - **Security headers:** CSP + `nosniff`/`X-Frame-Options`/`Referrer-Policy`/`Permissions-Policy`/HSTS,
   split across **`public/_headers`** (document + assets; Vite copies it to `dist/`) and
-  **`worker/config-response.ts`** (`nosniff` on `/config.js` — Cloudflare's `_headers` does **not**
+  **`worker/no-store-response.ts`** (the shared builder setting `nosniff` on every Worker-generated
+  response: `/config.js`, `/api/health`, the `/api` 404 — Cloudflare's `_headers` does **not**
   apply to Worker-generated responses). `script-src` stays a clean `'self'` (the load-bearing lock);
   `style-src` is `'self' 'unsafe-inline'` — the order-book grid (AG Grid) + Base UI popups inject runtime
   `<style>` elements, and locking `style-src` is ~0-value (CSS exfil is already closed by
