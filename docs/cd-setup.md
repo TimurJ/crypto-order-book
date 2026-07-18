@@ -319,6 +319,21 @@ hard-blocks a missing or local-only candidate rather than silently promoting UAT
 `--allow-no-rc` flag is the explicit escape hatch to tag `main` HEAD straight to PROD; `--yes` alone
 can't satisfy it, so unattended automation can't skip UAT by accident.
 
+The script's version math carries three portability/robustness gotchas worth keeping on a replay
+(from #23/#24):
+
+- **`sort -V` is GNU-only** — it silently misbehaves on a stock Mac's BSD `sort`, so the "latest
+  release" computation uses a portable numeric field sort instead:
+  `sort -t. -k1.2,1n -k2,2n -k3,3n` (`-k1.2` starts field 1 at character 2, skipping the leading
+  `v`). CI's `shell` job guards syntax and shellcheck findings, **not** GNU-only flags — those stay
+  a review concern. (Forensics aside: `git log -S 'sort -V'` never flags the fix commit — its
+  comment mentions the string, so the occurrence count is unchanged.)
+- **Version segments are normalized with `$((10#$n))`** before arithmetic — without the base-10
+  prefix, a leading-zero segment (a hand-made `v0.08.0`) is read as **octal**, and `08`/`09` are
+  hard errors inside `$((…))`.
+- **A failed `git push` deletes the just-created local tag** (`git tag -d`) — an orphaned local tag
+  would otherwise skew the next run's "latest release" baseline and block re-tagging.
+
 > **Why a helper, not release-please:** we evaluated release-please and kept the explicit tag model —
 > for a private (unpublished) financial app its value-adds don't apply, it's weak on the
 > prerelease/UAT-signoff flow, and it would need a prod-triggering write-scoped PAT. The helper is

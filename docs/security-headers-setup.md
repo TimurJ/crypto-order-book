@@ -69,13 +69,10 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
     next-themes-derived anti-flash) injects a transient `*{transition:none}` `<style>` during a theme
     swap so colors snap instead of animating, then removes it a frame later — see
     [`theme-provider.tsx`](../src/components/theme-provider.tsx). `'unsafe-inline'` permits it.
-  - **Gotcha — timing + coverage.** The `getComputedStyle` reflow + double-`rAF` in
-    `disableTransitionsTemporarily()` must not be simplified: removing the `<style>` too eagerly re-arms
-    transitions before the swap paints and the color smear returns. **Acceptance test:** toggle the theme
-    in **both Chromium and Firefox** with an element on screen that animates a **pseudo-element** (a focus
-    ring, or a `::before`/`::after` overlay/indicator) — *not* just a plain button, which exercises none
-    of the `::before`/`::after` selectors — and confirm no fade smear. The current scaffold has **no**
-    pseudo-element-animating component, so that case is **untestable today** — re-check it when one lands.
+  - **Gotcha — timing + coverage.** The `getComputedStyle` reflow + double-`rAF` removal timing in
+    `disableTransitionsTemporarily()` must not be simplified — the mechanism and its acceptance test
+    are owned by [`theming-architecture.md`](theming-architecture.md); what this doc owns is that
+    `style-src 'unsafe-inline'` must stay while that mechanism exists.
 - **HSTS is hygiene, not the MITM fix.** The `.dev` gTLD is in the browsers' built-in HSTS preload
   list (`include_subdomains`, `force-https`), so HTTPS is already forced for every `*.workers.dev`
   request before a byte is read. We set a plain `Strict-Transport-Security: max-age=63072000` —

@@ -14,7 +14,8 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
 
 - **React 19** + **TypeScript**
 - **Vite 8** (dev server & build)
-- **Tailwind CSS v4** for styling
+- **Tailwind CSS v4** for styling, with class-based light/dark theming (see
+  [`docs/theming-architecture.md`](docs/theming-architecture.md))
 - **shadcn/ui** (`base-mira` style — built on [Base UI](https://base-ui.com) primitives) with
   **Tabler** icons
 - **react-error-boundary** for a top-level error boundary + a central error-reporting seam (see

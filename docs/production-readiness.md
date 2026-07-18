@@ -43,7 +43,7 @@ runs locally (watch/UI/coverage), on pre-push, and in CI as a distinct check.
 - [ ] **Deferred:** swap `reportError` → Sentry (see #4)
 - [ ] **Deferred:** route-level boundaries — when a router is added
 
-**Architecture, decisions & roadmap:** [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
+**Architecture, decisions & roadmap:** [`docs/error-handling-architecture.md`](error-handling-architecture.md).
 
 **Why:** `main.tsx` mounted `<ThemeProvider><App/></ThemeProvider>` with no error boundary — any
 render-time throw white-screened the whole app with no recovery. The boundary closes that for the React
@@ -71,7 +71,7 @@ error-handling doc's roadmap).
       `vars.WS_URL` gets real values
 - [ ] **Deferred:** deep-link/SPA-fallback header coverage once a router lands
 
-**Architecture, decisions & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
+**Architecture, decisions & roadmap:** [`docs/security-headers-setup.md`](security-headers-setup.md).
 
 **Why:** `worker/index.ts` served assets and `/config.js` but set **no security headers**. Given
 the rest of the repo's security posture (secretlint, gitleaks, the "SPA ships everything to the
@@ -87,17 +87,21 @@ script is the same-origin `/config.js`.
       (logs are **off by default**) — top-level block, verified inherited by all three envs
 - [ ] Add client-side error tracking (e.g. Sentry) once there's real logic — pairs with the
       error boundary (#2); a one-line swap of the `reportError()` seam's body. See the Sentry adoption
-      section of [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md).
+      section of [`docs/error-handling-architecture.md`](error-handling-architecture.md).
 
 **Why:** There's currently no observability at all. Without it, prod failures are invisible.
 
-### 5. Post-deploy smoke test
-- [x] Add a `curl --fail` health check against each env URL after `wrangler deploy` in
-      `.github/workflows/cd.yml` (verifies `/` **and** `/config.js`; `--retry-all-errors` for
-      edge propagation) — runs in all three deploy jobs
+### 5. Deploy gates — smoke test + build provenance ✅ DONE
+- [x] Gate traffic **behind** the smoke test (evolved from the original post-deploy `curl --fail`
+      check): `wrangler versions upload` stages a version routing no traffic, `scripts/smoke.sh`
+      deep-checks its **preview URL**, and only a pass is promoted — then re-checked live.
+      Assertions + mechanism: [`cd-setup.md` §3.1](cd-setup.md#31-the-cd-workflow-cdyml)
+- [x] Attest **SLSA build provenance** for `dist-<sha>` in the `build` job (`actions/attest`) and
+      **verify it before every promote** (`scripts/verify-attestation.sh`) — an unattested artifact
+      never ships. Mechanism + invariants: [`cd-setup.md` §3.1](cd-setup.md#31-the-cd-workflow-cdyml)
 
-**Why:** CD deploys all three envs but never verifies the deploy actually serves. A one-line check
-catches a broken deploy before it's discovered manually — PROD especially.
+**Why:** CD deploys three envs; without the gates, a broken or unattested build reaches live
+traffic before anyone looks — PROD especially.
 
 ### 6. Dependency automation ✅ DONE
 - [x] Add `.github/dependabot.yml` (npm + github-actions ecosystems) — weekly, grouped non-majors,
@@ -109,11 +113,11 @@ catches a broken deploy before it's discovered manually — PROD especially.
       types track the enforced Node 24 runtime — prompted by Dependabot PR #13 (24 → 26); see item #10
 - [x] Resolve the sibling **`@cloudflare/workers-types` drift**: dropped the devDep and generate the Worker
       types from `compatibility_date` (`cf-typegen` → committed `worker/worker-configuration.d.ts`, CI-guarded
-      by `cf-typegen:check`) — no ignore rule needed. See [`docs/cd-setup.md`](docs/cd-setup.md).
+      by `cf-typegen:check`) — no ignore rule needed. See [`docs/cd-setup.md`](cd-setup.md).
 - [x] **Follow-up (user/GitHub):** enable Dependabot **alerts** + **security updates** in repo settings
       (`gh api -X PUT repos/{owner}/{repo}/vulnerability-alerts` + `…/automated-security-fixes`)
 
-**Architecture, decisions & roadmap:** [`docs/dependabot-setup.md`](docs/dependabot-setup.md).
+**Architecture, decisions & roadmap:** [`docs/dependabot-setup.md`](dependabot-setup.md).
 
 **Why:** No Dependabot/Renovate config and no automated dependency updates. Fits the existing
 CI/security posture cleanly.
@@ -127,6 +131,10 @@ CI/security posture cleanly.
       glyph (white on the base-mira `--chart-4` teal, hardcoded in `public/favicon.svg` with a
       comment naming its source token), referenced with `sizes="any"`. **SVG-only**
       (not a full raster set — see deferred below)
+- [x] **Gotcha (SVG/XML):** an XML comment may never contain `--` — it's illegal XML, and browsers
+      silently drop the whole favicon (no console error). Hit when the comment named the CSS custom
+      property `--chart-4`; it now spells the token dash-free ("the chart-4 token"). Parser-validate
+      every SVG edit (e.g. `xmllint --noout public/favicon.svg`)
 - [x] Remove the leftover starter asset `src/assets/react.svg` (orphaned, zero references)
 - [x] Add `<meta name="description">`, media-based light/dark `theme-color` (`#ffffff` / `#090b0c`
       from the `--background` OKLch tokens), and Open Graph + Twitter **text** tags to `index.html`
@@ -136,7 +144,9 @@ CI/security posture cleanly.
       env-identical, so no per-env URL) and a real 1200×630 share image; `twitter:card` currently
       degrades to a no-art `summary` card until then
 - [ ] **Deferred:** sync `theme-color` to the app's manual `d`-key/`localStorage` theme override
-      (media-based tags track the **OS** scheme only) — would wire `applyTheme()` in `theme-provider.tsx`
+      (media-based tags track the **OS** scheme only) — would wire `applyTheme()` in
+      `theme-provider.tsx`; also tracked in the
+      [`theming-architecture.md` Roadmap](theming-architecture.md#roadmap)
 
 ### 8. Onboarding templates ✅ DONE
 - [x] Add `.env.example` — a documented **signpost**, not a var list: the app consumes **zero**
@@ -156,7 +166,8 @@ CI/security posture cleanly.
       section. (Was initially MIT; switched to all-rights-reserved to block reuse/commercialization
       while keeping the repo public.)
 - [x] Add `.editorconfig` (Biome only covers `.ts`/`.tsx`; supplies charset/LF/final-newline/
-      2-space-indent defaults for CSS/JSON/MD/YAML, mirroring the Biome formatter)
+      2-space-indent defaults for CSS/JSON/MD/YAML, mirroring the Biome formatter — now chronicled
+      in [`biome-setup.md` §2](biome-setup.md#2-architecture-decisions-the-locked-forks))
 - [x] Add a PR template (`.github/PULL_REQUEST_TEMPLATE.md` — light checklist) + `CODEOWNERS`
       (`* @TimurJ`). **Follow-up (user/GitHub):** CODEOWNERS is inert until branch protection's
       *"Require review from Code Owners"* is enabled
