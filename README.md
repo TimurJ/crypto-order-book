@@ -3,9 +3,12 @@
 A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and shadcn/ui.
 
 > **Status: early scaffold.** The app shell and theming are in place (the starter landing
-> page with light/dark mode). Order-book functionality is not implemented yet — but the full
-> CI **and** CD pipeline is live: every push deploys across DEV/UAT/PROD on Cloudflare Workers
-> (see [Deployment](#deployment-cloudflare-workers)).
+> page with light/dark mode). The first domain subsystem — a resilient WebSocket transport
+> (`src/lib/connection/`) — has landed; the order-book sync + rendering layers on top of it
+> are not implemented yet. The full CI **and** CD pipeline is live: every push deploys across
+> DEV/UAT/PROD on Cloudflare Workers (see [Deployment](#deployment-cloudflare-workers)).
+> The repo also serves as a **reference foundation** for future projects — every subsystem is
+> chronicled in [`docs/`](docs/).
 
 ## Tech stack
 
@@ -16,6 +19,8 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
   **Tabler** icons
 - **react-error-boundary** for a top-level error boundary + a central error-reporting seam (see
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md))
+- A hand-rolled **resilient WebSocket transport** with automatic reconnection (see
+  [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md))
 - **Biome** for linting & formatting
 - **Vitest** + **React Testing Library** (jsdom) for unit / component tests
 - **pnpm** for package management

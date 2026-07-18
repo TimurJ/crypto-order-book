@@ -28,9 +28,14 @@ logs; the value is that it's the single seam Sentry slots into later (see [Roadm
 | Auto-recovered React error (e.g. hydration) | `createRoot` `onRecoverableError` — **prod only** | `reportError(…, "react:recoverable")` |
 | Unhandled promise rejection | `window` `unhandledrejection` listener | `reportError(…, "window:unhandledrejection")` |
 | Uncaught runtime / resource error | `window` `error` listener | `reportError(…, "window:error")` |
+| WebSocket transport error (socket `error` event, constructor throw, throwing subscriber) | the transport's own handlers ([`ws-transport-architecture.md`](ws-transport-architecture.md)) | `reportError(…, "ws:transport")` |
+
+`ReportContext` also reserves `"order-book:sync"` for the part-2 sync layer — add its row here
+when that layer lands.
 
 Source: `src/components/root-error-boundary.tsx` (boundary + fallback), `src/lib/report-error.ts`
-(the seam), `src/main.tsx` (the `createRoot` hooks + `window` listeners).
+(the seam), `src/main.tsx` (the `createRoot` hooks + `window` listeners),
+`src/lib/connection/ws-transport.ts` (the transport channel).
 
 ## Architecture decisions
 
@@ -55,7 +60,9 @@ risk surface. A malformed WebSocket frame handled in `onmessage` never reaches a
 So the real resilience work for the order book is **not** an error-boundary task — it lives in the
 WebSocket / data layer: validate the frame, `try/catch` the parse/reducer, then make a decision —
 drop the frame, resync, or reconnect. A boundary catching a render crash that resulted from bad state
-reaching the store is cleanup *after* the loss.
+reaching the store is cleanup *after* the loss. The first piece of that layer now exists — the
+reconnecting transport (see [WS-layer hardening](#ws-layer-hardening) below); the
+validate/drop/resync half is the part-2 sync layer.
 
 What's implemented today therefore hardens the **React tree**. The order-book data hardening is a
 separate, larger piece (see [WS-layer hardening](#ws-layer-hardening) below). The seam between them is
@@ -98,9 +105,12 @@ Ties to the production-readiness observability work (item #4). The seam was desi
 
 ### WS-layer hardening
 The real order-book data resilience — separate from, and bigger than, the React-tree boundary.
-- Validate every frame (a zod schema or a hand-rolled guard) and `try/catch` the parse/reducer.
-- Decide per failure: **drop** the frame, **resync** (refetch the snapshot), or **reconnect** with
-  backoff.
+- **Reconnect** with backoff — **delivered** by the transport layer (full-jitter backoff,
+  connect timeout, opt-in staleness watchdog, errors via `reportError("ws:transport")`); see
+  [`ws-transport-architecture.md`](ws-transport-architecture.md).
+- Validate every frame (a zod schema or a hand-rolled guard) and `try/catch` the parse/reducer —
+  the part-2 **sync layer** (`"order-book:sync"` is already reserved in `ReportContext`).
+- Decide per failure: **drop** the frame or **resync** (refetch the snapshot) — also part 2.
 - Surface fatal widget failures via `showBoundary`; log non-fatal ones via `reportError`.
 
 ## References

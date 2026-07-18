@@ -9,9 +9,14 @@ CSS v4, and shadcn/ui (the `base-mira` style, which uses **Base UI** primitives 
 and Tabler icons). Package manager is **pnpm**.
 
 > Status: **early scaffold**. The app currently renders the shadcn starter landing page
-> (`src/App.tsx`) with theming wired up. There is no order-book domain code yet. The CI **and**
-> CD pipelines are **live** — three-env Cloudflare Workers deploy (DEV/UAT/PROD), build-once-promote
-> verified. `main` is branch-protected.
+> (`src/App.tsx`) with theming wired up. The first domain subsystem — the **WebSocket transport**
+> (`src/lib/connection/`, part 1 of the connection stack) — has landed; the order-book sync +
+> rendering layers are pending. The CI **and** CD pipelines are **live** — three-env Cloudflare
+> Workers deploy (DEV/UAT/PROD), build-once-promote verified. `main` is branch-protected.
+>
+> This repo doubles as the **reference foundation** for future standalone projects: every major
+> subsystem gets a `docs/<name>-{setup,architecture}.md` chronicle (decisions, gotchas, reuse
+> recipe), so a new project can point here and replay the setup instead of reinventing it.
 
 ## Commands
 
@@ -296,6 +301,13 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   builds; a Vite plugin (`runtimeConfig` in `vite.config.ts`) both injects the
   `<script src="/config.js">` into `index.html` (so it's never bundled) and serves it in `pnpm dev`.
   Read config through `src/lib/app-config.ts` (`getConfig()` / `AppConfig`).
+- **Connection layer (part 1 of 3):** `src/lib/connection/ws-transport.ts` — an app-generic
+  reconnecting WebSocket transport (full-jitter backoff, connect timeout, **opt-in** staleness
+  watchdog, `subscribe`/`getState` store shaped for `useSyncExternalStore`). Protocol-agnostic:
+  Binance specifics belong to the future order-book sync layer (part 2). Instances are
+  **single-use** (`destroy()` is terminal) — consumers must follow the doc's consumer contract.
+  **Full architecture, consumer contract, verified spec nuances & reuse recipe:**
+  [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md).
 - **Error handling:** a root error boundary (`RootErrorBoundary`, `src/components/root-error-boundary.tsx`,
   built on **`react-error-boundary`**) wraps the app in `src/main.tsx`; every error channel funnels through
   one **Sentry-ready** seam, `reportError()` in `src/lib/report-error.ts` (a one-line swap later). React 19's
