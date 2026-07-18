@@ -3,6 +3,7 @@
 // subscribe/getState store shaped for React's useSyncExternalStore. No protocol
 // knowledge — Binance specifics live in the order-book sync layer.
 import { reportError } from "@/lib/report-error.ts"
+import { fullJitterDelay } from "./backoff.ts"
 
 export type WsTransportStatus =
   | "idle"
@@ -98,9 +99,7 @@ export function createWsTransport(options: WsTransportOptions): WsTransport {
   }
 
   const scheduleReconnect = () => {
-    // Full jitter: anywhere in [0, min(cap, base·2^attempts)).
-    const delay =
-      Math.random() * Math.min(maxDelayMs, baseDelayMs * 2 ** attempts)
+    const delay = fullJitterDelay(attempts, baseDelayMs, maxDelayMs)
     attempts += 1
     // Arm before notifying so a subscriber calling destroy() can still clear it.
     reconnectTimer = setTimeout(openSocket, delay)

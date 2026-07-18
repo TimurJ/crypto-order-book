@@ -12,7 +12,14 @@ import { type Connect, type Plugin, defineConfig } from "vite"
 //      deployed behaviour. One handler, registered in both hooks, mirroring the Worker's
 //      routing: /config.js → /api/health → unmatched /api/* 404 → static/SPA fallback.
 function runtimeConfig(): Plugin {
-  const devConfig = { env: "local", apiBaseUrl: "", wsUrl: "" }
+  // Same Binance hosts as every deployed env's vars (wrangler.jsonc) — local dev must not
+  // diverge from deployed connectivity.
+  const devConfig = {
+    env: "local",
+    apiBaseUrl: "",
+    wsUrl: "wss://data-stream.binance.vision",
+    binanceRestUrl: "https://data-api.binance.vision",
+  }
 
   const sendNoStore = (
     res: ServerResponse,

@@ -16,6 +16,7 @@ export interface RuntimeConfigEnv {
   APP_ENV: string
   API_BASE_URL: string
   WS_URL: string
+  BINANCE_REST_URL: string
 }
 
 export function configResponse(env: RuntimeConfigEnv): Response {
@@ -23,6 +24,7 @@ export function configResponse(env: RuntimeConfigEnv): Response {
     env: env.APP_ENV,
     apiBaseUrl: env.API_BASE_URL,
     wsUrl: env.WS_URL,
+    binanceRestUrl: env.BINANCE_REST_URL,
   }
   return noStoreResponse(
     `window.__APP_CONFIG__ = ${JSON.stringify(config)}`,

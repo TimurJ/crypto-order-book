@@ -5,9 +5,9 @@ decisions behind it, the consumer contract, the spec-level nuances it was audite
 testing harness, and the roadmap for the layers that build on it (order-book sync, rendering).
 
 > **Status:** implemented **2026-07-11** (PR #34), reviewed in depth **2026-07-18**.
-> This is **part 1 of the connection stack** — part 2 (the Binance order-book *sync* layer) and
-> part 3 (rendering) are pending; the module is a standalone, fully tested primitive with no
-> consumer yet.
+> This is **part 1 of the connection stack** — part 2 (the Binance order-book *sync* layer,
+> [`order-book-sync-architecture.md`](order-book-sync-architecture.md)) is its first real
+> consumer; part 3 (rendering) is pending.
 >
 > This is the long-form architecture record. The short version lives in
 > [`CLAUDE.md`](../CLAUDE.md#architecture) (rationale) and [`README.md`](../README.md#tech-stack)
@@ -45,13 +45,13 @@ Options (`WsTransportOptions`):
 
 Errors (socket `error` events, constructor throws, throwing subscribers) funnel through the
 central [`reportError`](error-handling-architecture.md) seam with `source: "ws:transport"`.
-`"order-book:sync"` is already reserved in `ReportContext` for part 2.
+`"order-book:sync"` is used in `ReportContext` by the part-2 order-book sync layer.
 
 ## Architecture decisions
 
 | Decision | Choice | Why |
 |---|---|---|
-| Backoff shape | **Full jitter**: `random() * min(cap, base·2^attempts)` | Prevents thundering-herd reconnects after an exchange-side blip; full jitter (vs equal jitter) gives the best contention spread (see the AWS reference below). `2^attempts` overflowing to `Infinity` is harmless — the `min(cap, …)` clamps it. |
+| Backoff shape | **Full jitter**: `random() * min(cap, base·2^attempts)` — the shared `fullJitterDelay` in `src/lib/connection/backoff.ts`, also consumed by the order-book sync layer's snapshot retries | Prevents thundering-herd reconnects after an exchange-side blip; full jitter (vs equal jitter) gives the best contention spread (see the AWS reference below). `2^attempts` overflowing to `Infinity` is harmless — the `min(cap, …)` clamps it. |
 | Backoff reset | On the first **message**, not on `open` | A connection that opens and instantly dies (flapping) shouldn't reset the delay ladder; only a *proven-healthy* connection (data flowing) does. |
 | Connect timeout | Own timer, default 10 s | The browser's native handshake timeout can take **minutes**; a hung `connecting` socket would otherwise stall the whole ladder. Armed before the `"connecting"` notify so a reentrant `destroy()` can clear it. |
 | Staleness watchdog | **Opt-in** (`staleThresholdMs` absent = off) | Stream cadence is the *caller's* knowledge — the transport can't know whether 10 s of silence is death (Binance depth stream) or normal (a quiet feed). One re-arming deadline instead of clear+set per message; measured with `performance.now()` because a wall-clock step would skew the deadline. |
@@ -63,7 +63,8 @@ central [`reportError`](error-handling-architecture.md) seam with `source: "ws:t
 
 ## Consumer contract
 
-The non-negotiables for the sync layer (part 2) and any future consumer:
+The non-negotiables for any consumer (the sync layer, part 2, follows every one — by
+*owning* its transport and mirroring the same single-use lifecycle):
 
 - **A transport instance is single-use.** `destroy()` is terminal, and `connect()` silently
   no-ops from `"closed"`. Under React **StrictMode** (dev), effects run mount → cleanup →
@@ -157,7 +158,7 @@ project) picks them up knowingly:
 
 This module is designed to be lifted wholesale:
 
-1. Copy `src/lib/connection/ws-transport.ts` + `ws-transport.test.ts`.
+1. Copy `src/lib/connection/ws-transport.ts` + `backoff.ts` + `ws-transport.test.ts`.
 2. Satisfy its **single dependency**: the `reportError(error, { source })` seam
    (`@/lib/report-error.ts`). Either bring the seam (recommended — see
    [`error-handling-architecture.md`](error-handling-architecture.md)) or stub it with
@@ -174,20 +175,23 @@ later; only the `url` it's pointed at changes.
 
 ## Roadmap
 
-### Part 2 — order-book sync layer
-The protocol brain: maintain the book from Binance depth diffs (`lastUpdateId` sequencing),
-refetch the snapshot on every reconnect (keyed on `openCount`), and own the frame-validation /
-failure-decision half of error-handling's
-[WS-layer hardening](error-handling-architecture.md#ws-layer-hardening) — plus the one option
-only this layer can take, `destroy()`+recreate the transport. Arms the watchdog per the
-[consumer contract](#consumer-contract).
+### Part 2 — order-book sync layer ✅ landed
+`src/lib/order-book/` — the protocol brain: maintains the book from Binance depth diffs
+(`lastUpdateId` sequencing), resyncs on every reopen (via `onOpen`, the callback equivalent of
+keying on `openCount`), owns frame validation, and arms the watchdog at 10s per the
+[consumer contract](#consumer-contract). It follows the create-inside-effect / single-use
+lifecycle by *mirroring* it: the engine owns its transport and is itself single-use. The
+`destroy()`+recreate option stayed in reserve — gap recovery resyncs in place over the healthy
+socket instead. Full chronicle:
+[`order-book-sync-architecture.md`](order-book-sync-architecture.md).
 
 ### Part 3 — rendering layer
 The order-book UI (grid + depth visualization) consuming the sync layer's store.
 
 ### Per-env endpoint → CSP into the Worker
-When `vars.WS_URL` gets real per-env values, the per-env CSP `connect-src` work unblocks —
-mechanics (including the `:9443` variant gotcha) in
+`vars.WS_URL` now carries the (env-identical) Binance market-data host, so `connect-src` is
+extended statically in `public/_headers` — the CSP-into-the-Worker move stays deferred until
+the origins actually **differ per env**; mechanics (including the `:9443` variant gotcha) in
 [`security-headers-setup.md`](security-headers-setup.md).
 
 ## References

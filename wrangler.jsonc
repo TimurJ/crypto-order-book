@@ -38,18 +38,37 @@
   // `vars` are non-inheritable, so they're declared per environment. Env-specific config is
   // exposed to the client at runtime via /config.js (worker/index.ts) and is never baked into
   // the bundle — that's what lets one built artifact be promoted unchanged across all three envs.
+  // WS_URL / BINANCE_REST_URL are Binance's market-data-only hosts (no auth possible on
+  // them) — deliberately identical across envs today, which is what lets the CSP stay in
+  // the static public/_headers. If they ever diverge per env, the CSP must move into the
+  // Worker (docs/security-headers-setup.md).
   "env": {
     "dev": {
       "name": "crypto-order-book-dev",
-      "vars": { "APP_ENV": "dev", "API_BASE_URL": "", "WS_URL": "" }
+      "vars": {
+        "APP_ENV": "dev",
+        "API_BASE_URL": "",
+        "WS_URL": "wss://data-stream.binance.vision",
+        "BINANCE_REST_URL": "https://data-api.binance.vision"
+      }
     },
     "uat": {
       "name": "crypto-order-book-uat",
-      "vars": { "APP_ENV": "uat", "API_BASE_URL": "", "WS_URL": "" }
+      "vars": {
+        "APP_ENV": "uat",
+        "API_BASE_URL": "",
+        "WS_URL": "wss://data-stream.binance.vision",
+        "BINANCE_REST_URL": "https://data-api.binance.vision"
+      }
     },
     "prod": {
       "name": "crypto-order-book-prod",
-      "vars": { "APP_ENV": "prod", "API_BASE_URL": "", "WS_URL": "" }
+      "vars": {
+        "APP_ENV": "prod",
+        "API_BASE_URL": "",
+        "WS_URL": "wss://data-stream.binance.vision",
+        "BINANCE_REST_URL": "https://data-api.binance.vision"
+      }
     }
   }
 }

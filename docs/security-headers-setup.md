@@ -26,7 +26,8 @@ The CSP today:
 
 ```
 default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
-font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';
+font-src 'self'; connect-src 'self' https://data-api.binance.vision wss://data-stream.binance.vision;
+object-src 'none'; base-uri 'self'; form-action 'self';
 frame-ancestors 'none'; upgrade-insecure-requests
 ```
 
@@ -118,12 +119,14 @@ surface (read its `dist/index.html`, inventory runtime style/script injection, a
 ## The build-once-promote constraint on `connect-src`
 
 `dist/_headers` ships **unchanged** to dev/uat/prod (that's the whole point of build-once-promote),
-so the CSP is identical across envs. `connect-src` is `'self'` today only because `API_BASE_URL` /
-`WS_URL` are empty. When real per-env exchange endpoints land (e.g. `wss://stream.binance.com`,
-mind the `:9443` variant) and they **differ per env**, a static `_headers` CSP can't express that.
-At that point the CSP moves into the Worker, built from `env.WS_URL` / `env.API_BASE_URL` — the same
-per-env seam that already produces `/config.js`. (Until they diverge, a single shared `connect-src`
-in `_headers` is fine.)
+so the CSP is identical across envs. `connect-src` now lists the order-book layer's two exchange
+origins — `https://data-api.binance.vision` and `wss://data-stream.binance.vision` (Binance's
+market-data-only hosts; see [`order-book-sync-architecture.md`](order-book-sync-architecture.md)) —
+which works in a static file precisely because every env's `vars` carry the **same** hosts
+(deliberate: public market data has no per-env tier). If per-env endpoints ever land (e.g. a
+testnet stream in dev, or `wss://stream.binance.com` — mind the `:9443` variant), a static
+`_headers` CSP can't express that; at that point the CSP moves into the Worker, built from
+`env.WS_URL` / `env.BINANCE_REST_URL` — the same per-env seam that already produces `/config.js`.
 
 ## Roadmap
 

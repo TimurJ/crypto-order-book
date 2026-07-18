@@ -8,13 +8,15 @@ Guidance for working in this repository.
 CSS v4, and shadcn/ui (the `base-mira` style, which uses **Base UI** primitives — not Radix —
 and Tabler icons). Package manager is **pnpm**.
 
-> Status: **early scaffold**. The app currently renders the shadcn starter landing page
-> (`src/App.tsx`) with theming wired up. Two domain subsystems have landed: the **WebSocket
-> transport** (`src/lib/connection/`, part 1 of the connection stack) and the **server-state /
-> REST layer** (**TanStack Query v5**, `src/lib/query/`, with the Worker's first `/api/*` route,
-> `/api/health`, as its demo consumer); the order-book sync + rendering layers are pending. The
-> CI **and** CD pipelines are **live** — three-env Cloudflare Workers deploy (DEV/UAT/PROD),
-> build-once-promote verified. `main` is branch-protected.
+> Status: **data layer live, UI pending**. The app currently renders the shadcn starter landing
+> page (`src/App.tsx`) with theming wired up. Three domain subsystems have landed: the
+> **WebSocket transport** (`src/lib/connection/`, part 1 of the connection stack), the
+> **server-state / REST layer** (**TanStack Query v5**, `src/lib/query/`, with the Worker's
+> first `/api/*` route, `/api/health`, as its demo consumer), and the **Binance order-book sync
+> layer** (`src/lib/order-book/`, part 2 — a live local book proven by a console demo); only the
+> rendering layer (part 3) is pending. The CI **and** CD pipelines are **live** — three-env
+> Cloudflare Workers deploy (DEV/UAT/PROD), build-once-promote verified. `main` is
+> branch-protected.
 >
 > This repo doubles as the **reference foundation** for future standalone projects: every major
 > subsystem gets a `docs/<name>-{setup,architecture}.md` chronicle (decisions, gotchas, reuse
@@ -320,10 +322,25 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
 - **Connection layer (part 1 of 3):** `src/lib/connection/ws-transport.ts` — an app-generic
   reconnecting WebSocket transport (full-jitter backoff, connect timeout, **opt-in** staleness
   watchdog, `subscribe`/`getState` store shaped for `useSyncExternalStore`). Protocol-agnostic:
-  Binance specifics belong to the future order-book sync layer (part 2). Instances are
+  Binance specifics live in the order-book sync layer (part 2). Instances are
   **single-use** (`destroy()` is terminal) — consumers must follow the doc's consumer contract.
   **Full architecture, consumer contract, verified spec nuances & reuse recipe:**
   [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md).
+- **Order-book sync layer (part 2 of 3):** `src/lib/order-book/` — the Binance protocol brain.
+  `createOrderBookSync()` (`order-book-sync.ts`) owns its transport, runs the spec's
+  buffer→snapshot→stitch dance, verifies `U`/`u` continuity on every event, and recovers from
+  ANY discontinuity by re-running the dance **in place** over the healthy socket (gap frames
+  seed the next buffer). zod-validated payloads (`binance-schemas.ts`, tolerant of unknown
+  keys); `BinanceHttpError extends HttpError` + `fetchDepthSnapshot` (`binance-rest.ts` —
+  deliberately NOT via Query); Map-per-side book, sort-on-read (`book-levels.ts`); snapshot
+  fetch failures retry forever (full-jitter, 30s floor after 429/418; `degraded` after 3 is
+  advisory). Store shares its Maps by reference — safe by the rebuild-on-every-commit
+  invariant. Single-use; console demo (`order-book-demo.ts`) ships in dev/uat until part 3 (gated
+  out of prod — no live Binance client for real visitors). Endpoints are
+  Binance's market-data-only hosts via `/config.js` (`wsUrl`, `binanceRestUrl`) — env-identical
+  by design, which is what keeps the CSP static. **Decision log (all 10 explicitly approved),
+  spec verification, failure-mode matrix & reuse recipe:**
+  [`docs/order-book-sync-architecture.md`](docs/order-book-sync-architecture.md).
 - **Server-state / REST layer:** **TanStack Query v5**. `createQueryClient()`
   (`src/lib/query/query-client.ts`) owns the defaults (30s `staleTime`, never-retry-4xx/
   never-retry-`ParseError` predicate) and the `QueryCache`/`MutationCache` → `reportError()`
@@ -347,9 +364,10 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   apply to Worker-generated responses). `script-src` stays a clean `'self'` (the load-bearing lock);
   `style-src` is `'self' 'unsafe-inline'` — the order-book grid (AG Grid) + Base UI popups inject runtime
   `<style>` elements, and locking `style-src` is ~0-value (CSS exfil is already closed by
-  `img-src`/`font-src`/`default-src 'self'`). **`connect-src`/`style-src` are project-specific**, and
-  per-env exchange origins will later push the CSP into the Worker (a build-once `_headers` file is
-  env-identical). HSTS is hygiene
+  `img-src`/`font-src`/`default-src 'self'`). **`connect-src`/`style-src` are project-specific**;
+  `connect-src` lists the order-book layer's two Binance market-data hosts — statically expressible
+  in the build-once `_headers` file only because every env's `vars` carry the **same** hosts
+  (deliberate); per-env origins would push the CSP into the Worker. HSTS is hygiene
   (`.dev` is already preload-forced).
   **Rationale, the coverage boundary & roadmap:** [`docs/security-headers-setup.md`](docs/security-headers-setup.md).
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`,

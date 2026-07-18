@@ -3,8 +3,9 @@
 A step-by-step record of how the test harness was added, the decisions behind it, the gotchas hit
 along the way, and a from-scratch recipe to reproduce it on the next project.
 
-> **Status:** live since **2026-06-28**. 51 tests green across 10 files; wired into the pre-push hook
-> and a dedicated CI `test` job. Type-checked as part of `pnpm build`.
+> **Status:** live since **2026-06-28**. 94 tests green across 16 files; wired into the pre-push hook
+> and a dedicated CI `test` job. Type-checked as part of `pnpm build`. Shared doubles live in
+> `src/test/` (`fake-web-socket.ts` and `silence-console-error.ts` serve both connection-stack suites).
 >
 > This is the long-form history. The short versions live in
 > [`README.md`](../README.md#testing) (how-to) and [`CLAUDE.md`](../CLAUDE.md#testing--vitest)

@@ -6,7 +6,8 @@
 # There are NO Worker secrets today — this is a template for when a backend is
 # added. Rules (see the "Secrets" section of README.md / CLAUDE.md):
 #   - Secrets ONLY. Public, non-secret per-env config (APP_ENV, API_BASE_URL,
-#     WS_URL) lives in `vars` in wrangler.jsonc — NOT here, and is NOT a secret.
+#     WS_URL, BINANCE_REST_URL) lives in `vars` in wrangler.jsonc — NOT here,
+#     and is NOT a secret.
 #   - In deployed envs, set the same keys with:
 #       wrangler secret put <NAME> --env dev|uat|prod
 #   - Never commit `.dev.vars`; never put a secret in `vars` in wrangler.jsonc

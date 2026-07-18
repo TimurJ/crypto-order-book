@@ -9,7 +9,10 @@ export type AppEnv = "dev" | "uat" | "prod" | "local"
 export interface AppConfig {
   env: AppEnv
   apiBaseUrl: string
+  /** Exchange stream base (wss://…) — consumed by the order-book sync layer. */
   wsUrl: string
+  /** Exchange REST base (https://…) — the depth-snapshot endpoint's origin. */
+  binanceRestUrl: string
 }
 
 declare global {
@@ -24,6 +27,7 @@ const fallback: AppConfig = {
   env: "local",
   apiBaseUrl: "",
   wsUrl: "",
+  binanceRestUrl: "",
 }
 
 export function getConfig(): AppConfig {
