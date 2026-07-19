@@ -8,13 +8,14 @@ Guidance for working in this repository.
 CSS v4, and shadcn/ui (the `base-mira` style, which uses **Base UI** primitives — not Radix —
 and Tabler icons). Package manager is **pnpm**.
 
-> Status: **data layer live, UI pending**. The app currently renders the shadcn starter landing
-> page (`src/App.tsx`) with theming wired up. Three domain subsystems have landed: the
+> Status: **order book live end-to-end**. The app (`src/App.tsx`) renders the live BTCUSDT
+> order book (every env, prod included). Four domain subsystems have landed: the
 > **WebSocket transport** (`src/lib/connection/`, part 1 of the connection stack), the
 > **server-state / REST layer** (**TanStack Query v5**, `src/lib/query/`, with the Worker's
-> first `/api/*` route, `/api/health`, as its demo consumer), and the **Binance order-book sync
-> layer** (`src/lib/order-book/`, part 2 — a live local book proven by a console demo); only the
-> rendering layer (part 3) is pending. The CI **and** CD pipelines are **live** — three-env
+> first `/api/*` route, `/api/health`, as its demo consumer), the **Binance order-book sync
+> layer** (`src/lib/order-book/`, part 2 — a live, self-healing local book), and the
+> **order-book UI** (`src/features/order-book/`, part 3 — a manually rendered slot-keyed
+> ladder; the connection stack is complete). The CI **and** CD pipelines are **live** — three-env
 > Cloudflare Workers deploy (DEV/UAT/PROD), build-once-promote verified. `main` is
 > branch-protected.
 >
@@ -335,12 +336,29 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   deliberately NOT via Query); Map-per-side book, sort-on-read (`book-levels.ts`); snapshot
   fetch failures retry forever (full-jitter, 30s floor after 429/418; `degraded` after 3 is
   advisory). Store shares its Maps by reference — safe by the rebuild-on-every-commit
-  invariant. Single-use; console demo (`order-book-demo.ts`) ships in dev/uat until part 3 (gated
-  out of prod — no live Binance client for real visitors). Endpoints are
+  invariant. Single-use; consumed by the part-3 UI (the console demo that proved this layer is
+  retired). Endpoints are
   Binance's market-data-only hosts via `/config.js` (`wsUrl`, `binanceRestUrl`) — env-identical
   by design, which is what keeps the CSP static. **Decision log (all 10 explicitly approved),
   spec verification, failure-mode matrix & reuse recipe:**
   [`docs/order-book-sync-architecture.md`](docs/order-book-sync-architecture.md).
+- **Order-book UI (part 3 of 3):** `src/features/order-book/` — the rendering layer, a
+  **manual** slot-keyed ladder (AG Grid was debated and reserved for a future blotter — a
+  ladder isn't a grid). Hook-owned engine lifecycle (`use-order-book-sync.ts`,
+  StrictMode-safe create-in-effect/destroy-in-cleanup; UI passes `depthLimit: 1000`); pure
+  view-model (`order-book-view.ts` — sorted top-20, cumulative cross-side depth bars,
+  `hasBook`, non-positive-spread guard); price-diffed level flashes (`use-level-flashes.ts`
+  — never flash a rank shift, and only on a `live→live` commit so a resync doesn't flash
+  the whole ladder); lossless string-truncation formatting (`order-book-format.ts` — never
+  `toFixed` an exchange price); skeleton → live → stale-dimmed status UX with a visual-only
+  status Badge plus two a11y live-region tiers (`use-status-announcement.ts` — polite
+  region announces availability, assertive Alert announces problems, never both at once);
+  one real `<table>`, no `aria-live` on streaming data. Built on
+  shadcn Table/Badge/Skeleton/Card/Alert; `--bid`/`--ask` OKLch tokens
+  (validator-checked). Tests inject a fake engine via the `createSync` seam
+  (`src/test/fake-order-book-sync.ts`) — no module mocking. **Decision log, implementation
+  amendments & reuse recipe:**
+  [`docs/order-book-ui-architecture.md`](docs/order-book-ui-architecture.md).
 - **Server-state / REST layer:** **TanStack Query v5**. `createQueryClient()`
   (`src/lib/query/query-client.ts`) owns the defaults (30s `staleTime`, never-retry-4xx/
   never-retry-`ParseError` predicate) and the `QueryCache`/`MutationCache` → `reportError()`

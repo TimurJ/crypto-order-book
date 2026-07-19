@@ -22,17 +22,23 @@ function renderApp() {
 }
 
 describe("App", () => {
-  it("renders the scaffold heading and button", () => {
+  it("renders the shell heading", () => {
     renderApp()
     expect(
-      screen.getByRole("heading", { name: "Project ready!" })
+      screen.getByRole("heading", { name: "Crypto Order Book" })
     ).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Button" })).toBeInTheDocument()
+  })
+
+  it("renders the order-book widget on its not-configured path", () => {
+    // No window.__APP_CONFIG__ in jsdom, so getConfig() falls back to empty URLs —
+    // the widget guard renders its explicit state and never constructs an engine.
+    renderApp()
+    expect(screen.getByText("BTC/USDT")).toBeInTheDocument()
+    expect(screen.getByText(/not configured/i)).toBeInTheDocument()
   })
 
   it("shows the env from the runtime-config fallback", () => {
     renderApp()
-    // No window.__APP_CONFIG__ in jsdom, so getConfig() returns the "local" fallback.
     expect(screen.getByText("local")).toBeInTheDocument()
   })
 
