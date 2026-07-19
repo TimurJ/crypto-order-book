@@ -4,8 +4,8 @@ import type { OrderBookStatus } from "@/lib/order-book/order-book-sync.ts"
 import {
   diffChangedPrices,
   EMPTY_FLASH_DIFF,
-  useFlashKey,
   useLevelFlashes,
+  useRowFlash,
 } from "./use-level-flashes.ts"
 
 const level = (price: string, qty: string) => ({ price, qty })
@@ -37,14 +37,29 @@ describe("diffChangedPrices", () => {
     expect(next.qtyByPrice.get("100.00")).toBe("9.9")
   })
 
-  it("flags a price whose quantity changed", () => {
+  it("flags a quantity increase as up and a decrease as down", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0"), level("99.00", "2.0")],
+      true
+    )
+    const next = diffChangedPrices(
+      first,
+      [level("100.00", "2.0"), level("99.00", "0.5")],
+      false
+    )
+    expect(next.changed.get("100.00")).toBe("up")
+    expect(next.changed.get("99.00")).toBe("down")
+  })
+
+  it("does not flag a cosmetic string change with equal numeric value", () => {
     const first = diffChangedPrices(
       EMPTY_FLASH_DIFF,
       [level("100.00", "1.0")],
       true
     )
-    const next = diffChangedPrices(first, [level("100.00", "2.0")], false)
-    expect(next.changed.has("100.00")).toBe(true)
+    const next = diffChangedPrices(first, [level("100.00", "1.00")], false)
+    expect(next.changed.size).toBe(0)
   })
 
   it("does not flag a pure rank shift", () => {
@@ -62,7 +77,7 @@ describe("diffChangedPrices", () => {
     expect(next.changed.size).toBe(0)
   })
 
-  it("flags a price newly entering the window", () => {
+  it("flags a price newly entering the window as up", () => {
     const first = diffChangedPrices(
       EMPTY_FLASH_DIFF,
       [level("100.00", "1.0")],
@@ -73,7 +88,7 @@ describe("diffChangedPrices", () => {
       [level("100.00", "1.0"), level("101.00", "0.5")],
       false
     )
-    expect(next.changed.has("101.00")).toBe(true)
+    expect(next.changed.get("101.00")).toBe("up")
     expect(next.changed.has("100.00")).toBe(false)
   })
 
@@ -97,13 +112,13 @@ describe("diffChangedPrices", () => {
     const next = diffChangedPrices(first, [level("100.00", "1.0")], false)
     expect(next.qtyByPrice.has("101.00")).toBe(false)
     expect(next.qtyByPrice.size).toBe(1)
-    // A departed price re-entering counts as new-to-window again.
+    // A departed price re-entering counts as new-to-window (up) again.
     const back = diffChangedPrices(
       next,
       [level("100.00", "1.0"), level("101.00", "0.7")],
       false
     )
-    expect(back.changed.has("101.00")).toBe(true)
+    expect(back.changed.get("101.00")).toBe("up")
   })
 })
 
@@ -120,7 +135,7 @@ describe("useLevelFlashes", () => {
     status: "live",
   }
 
-  it("flashes only while streaming live→live, per side", () => {
+  it("flashes only while streaming live→live, per side, with direction", () => {
     const { result, rerender } = renderHook(
       ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
       { initialProps: liveBook }
@@ -128,7 +143,7 @@ describe("useLevelFlashes", () => {
     // First live commit is the silent baseline.
     expect(result.current.bidFlashes.size).toBe(0)
     rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
-    expect(result.current.bidFlashes.has("100.00")).toBe(true)
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
     expect(result.current.askFlashes.size).toBe(0)
     // A re-render without a data change must not re-flash.
     rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
@@ -155,7 +170,7 @@ describe("useLevelFlashes", () => {
       asks: [level("201.00", "5.0")],
       status: "live",
     })
-    expect(result.current.bidFlashes.has("200.00")).toBe(true)
+    expect(result.current.bidFlashes.get("200.00")).toBe("up")
   })
 
   it("does not flash a changed book committed while still syncing (gap-partial)", () => {
@@ -191,9 +206,9 @@ describe("useLevelFlashes", () => {
     // Bid side empties (still live — a thin book, not a resync).
     rerender({ ...liveBook, bids: [] })
     expect(result.current.bidFlashes.size).toBe(0)
-    // ...then refills: the returning level must flash (new-to-window), not be silenced.
+    // ...then refills: the returning level must flash (new-to-window ⇒ up), not be silenced.
     rerender(liveBook)
-    expect(result.current.bidFlashes.has("100.00")).toBe(true)
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
   })
 
   it("does not double-bump flashes under StrictMode's double render", () => {
@@ -202,32 +217,45 @@ describe("useLevelFlashes", () => {
       { initialProps: liveBook, wrapper: StrictMode }
     )
     rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
-    expect(result.current.bidFlashes.has("100.00")).toBe(true)
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
     expect(result.current.bidFlashes.size).toBe(1)
   })
 })
 
-describe("useFlashKey", () => {
-  it("bumps once per fresh render and holds otherwise", () => {
+describe("useRowFlash", () => {
+  type Props = { direction: "up" | "down" | null }
+
+  it("bumps once per flagged render and holds otherwise", () => {
     const { result, rerender } = renderHook(
-      ({ fresh }: { fresh: boolean }) => useFlashKey(fresh),
-      { initialProps: { fresh: false } }
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: null } as Props }
     )
-    expect(result.current).toBe(0)
-    rerender({ fresh: true })
-    expect(result.current).toBe(1)
-    rerender({ fresh: false })
-    expect(result.current).toBe(1)
-    rerender({ fresh: true })
-    expect(result.current).toBe(2)
+    expect(result.current).toEqual({ key: 0, tone: null })
+    rerender({ direction: "up" })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
+    rerender({ direction: null })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
+    rerender({ direction: "down" })
+    expect(result.current).toEqual({ key: 2, tone: "down" })
+  })
+
+  it("latches the tone while parked so the overlay keeps its color", () => {
+    const { result, rerender } = renderHook(
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: "down" } as Props }
+    )
+    expect(result.current).toEqual({ key: 1, tone: "down" })
+    rerender({ direction: null })
+    rerender({ direction: null })
+    expect(result.current).toEqual({ key: 1, tone: "down" })
   })
 
   it("does not double-bump under StrictMode's double render", () => {
     const { result, rerender } = renderHook(
-      ({ fresh }: { fresh: boolean }) => useFlashKey(fresh),
-      { initialProps: { fresh: false }, wrapper: StrictMode }
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: null } as Props, wrapper: StrictMode }
     )
-    rerender({ fresh: true })
-    expect(result.current).toBe(1)
+    rerender({ direction: "up" })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
   })
 })

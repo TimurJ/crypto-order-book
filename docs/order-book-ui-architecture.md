@@ -6,7 +6,8 @@ transport ([`ws-transport-architecture.md`](ws-transport-architecture.md)). A ma
 rendered, slot-keyed ladder in `src/features/order-book/` — live book, depth bars,
 level-change flashes, full status/degradation UX. Every decision below was debated and
 explicitly signed off before implementation; the amendments found during implementation
-are recorded at the end.
+are recorded at the end, and the later **visual redesign** (a design handoff adopted as
+look-only on top of these decisions) is chronicled in the Redesign section.
 
 > Status: **live**. The app shell (`src/App.tsx`) renders the widget as the page; the
 > part-2 console demo (`order-book-demo.ts`) is retired. Prod renders the live book —
@@ -208,16 +209,16 @@ positioning — that's the vendored-code model working as intended.
 
 ## Failure-mode → UI matrix
 
-| Engine state | UI |
+| Engine state | UI (post-redesign chrome — dot instead of badge, see the Redesign section) |
 |---|---|
-| `idle`/`connecting`/`syncing`, never synced | skeleton ladder + status badge, `aria-busy`; polite region silent |
-| `degraded`, never synced | skeleton + destructive badge + assertive Alert ("retrying until the book syncs") |
-| `live` (first sync) | full ladder, bars, flashes; badge in bid-green; polite region announces "Order book live" |
-| `connecting`/`syncing` after a sync | last-known book dimmed 60%, frozen (engine commit-freeze); badge shows status, polite region silent (routine gap) |
+| `idle`/`connecting`/`syncing`, never synced | skeleton ladder + static muted dot with status word, `aria-busy`; polite region silent |
+| `degraded`, never synced | skeleton + static destructive dot "Degraded" + assertive Alert ("retrying until the book syncs") |
+| `live` (first sync) | full ladder, bars, flashes, spread row centered in the scroll region; dot pulses bid-green "Live"; polite region announces "Order book live" |
+| `connecting`/`syncing` after a sync | last-known book dimmed 60%, frozen (engine commit-freeze); dot shows the status word, polite region silent (routine gap) |
 | `degraded` after a sync | dimmed book + assertive Alert ("last known state, may be stale"); recovery to `live` announces politely |
 | `destroyed` | skeleton presentation (unmount-only in practice; pinned by test) |
-| empty config (test/local fallback) | "not configured" card; engine never constructed |
-| malformed frames / resyncs | invisible except `resyncs N · dropped N` in the card footer |
+| empty config (test/local fallback) | "not configured" panel; engine never constructed |
+| malformed frames / resyncs | invisible except `resyncs N · dropped N` in the panel's diagnostics strip |
 
 ## Implementation amendments (found while building, all improving on the plan)
 
@@ -269,16 +270,128 @@ fixed to the "production-ready + documented reference" bar:
   snapshot shape had been hand-built in both the hook and the test fake; one factory now
   sources both (the running engine still builds its own snapshots from live state).
 
+## Redesign — design-handoff adoption (look only)
+
+The widget was visually redesigned against a high-fidelity handoff bundle (Hyperbook DS,
+iterated with Claude Design; a working artifact, never committed — this section is its
+durable record). Its neutral tokens were exported *from this repo*, so only the
+order-book colors differed. Two governing rules, both user directives:
+
+- **The handoff supplies styling and look ONLY.** Its HTML structure and logic are
+  prototype artifacts (an `<x-dc>` runtime driving a fake-data simulation) and were
+  never ported. Every locked decision above stands unless the look genuinely could not
+  be expressed with it; the supersessions are listed below.
+- **Never import `@base-ui/react` directly in app/feature code.** Base UI exists here
+  purely inside shadcn's vendored components — a primitive is either vendored via the
+  shadcn CLI or hand-built from scratch, nothing in between.
+
+What changed, decision by decision:
+
+1. **Layout (supersedes decision 5's mirrored side-by-side).** Industry-standard
+   stacked ladder: asks above (worst price at the top, best ask ending adjacent to the
+   spread row), a muted spread strip, bids below (best first). Still ONE real `<table>`
+   (decision 10 survives): three `<tbody>` sections — asks / spread (one colSpan-3 row)
+   / bids — inside a `table-fixed` 3-equal-column table (`Price | Size | Total`). Rows
+   stay slot-keyed per side; the asks' visual reversal is a constant flip of the slot
+   list, so keys never reorder.
+2. **Scroll region (new; user decision).** 20 levels/side kept (the handoff's 15 was
+   its sim default), so the ladder became the page's ONLY scroll region: `App` is
+   `h-dvh overflow-hidden`, the panel `max-h-full`, the ladder `flex-1 min-h-0
+   overflow-y-auto`. The column header is sticky inside it — TWO gotchas, both found
+   the hard way: (a) its hairline is an inset `box-shadow`, NOT a border — Tailwind
+   preflight collapses table borders (`border-collapse: collapse`), and a collapsed
+   border does not travel with a sticky cell in Chrome; (b) the vendored `Table`
+   wrapper's `overflow-x-auto` container is an intermediate scroll container that
+   silently breaks `position: sticky` against the outer scroller (caught in the browser
+   pass — jsdom can't see it), so the vendored Table gained a `containerClassName` prop
+   and the ladder passes `overflow-x-visible`. On each `hasBook` false→true edge a
+   `useLayoutEffect` scrolls once so
+   the spread row sits centered (measured via `getBoundingClientRect` deltas — a `tr`'s
+   offsetParent is the table, not the scroll container); it never re-runs on data
+   commits, so free scrolling is never hijacked.
+3. **Depth bars (supersedes decision 6's cross-side scale).** Per-side scaling (each
+   side's worst visible level reaches 100%), right-anchored on BOTH sides per the
+   design. The imbalance signal the cross-side scale encoded implicitly now lives in the
+   explicit **imbalance bar** (`NN% Buy / Sell NN%` over a 6px split bar, from the
+   visible window's cumulative volume; view-model `imbalance`, null on an empty window).
+   Rendering generalizes the proven layer-in-cell technique from 200% to **300%** in the
+   rightmost (Total) cell — same z-0 layers / z-10 text-span stacking.
+4. **Flashes (amends decision 7 — trigger changed, mechanism kept).** The design
+   flashes a level whose SIZE changed, green on increase / red on decrease
+   (new-to-window counts as up). `diffChangedPrices` now emits a price→direction map
+   (numeric comparison, so a cosmetic string change like "1.0"→"1.00" is no change),
+   and `useFlashKey` grew into `useRowFlash(direction)` → `{key, tone}`, latching the
+   tone at bump time so a parked overlay keeps its color. Everything load-bearing is
+   unchanged: keyed-remount CSS animation (zero timers), `live → live` gate, silent
+   resync re-baseline, never-flash-rank-shifts, `motion-reduce`. The prototype's
+   `background-color` transition + clear-`setTimeout` was not ported — it works at its
+   850ms sim tick and strobes at the real ~10 Hz commit rate.
+5. **Spread row (new).** The big center price is the **derived mid** —
+   `(bestBid + bestAsk) / 2` — because the sync layer streams depth only; there is no
+   trade stream, hence no last price (user decision). `mid`/`spreadPct` share the
+   crossed-book null-guard with `spread` exactly. The ▲/▼ direction needs cross-commit
+   memory the pure view-model must not hold, so it lives in `use-mid-direction.ts`
+   (same ref-committed-in-effect purity pattern as the flash hooks; latches while mid
+   holds still, wipes on null).
+6. **Row selection: dropped (user decision).** The prototype's whole-row `<button>`
+   markup, selected-price bar, and inset accent were not ported; rows are
+   non-interactive. This is also what let the table semantics survive unchanged.
+7. **Hover aggregates popup (new).** Each row opens a floating panel (Distance from
+   Mid / Average Price / Total BTC / Total USDT — all derived floats; the handoff's
+   "USDC" label was a prototype mismatch with its own BTC-USDT pair, so the label
+   derives from `display.quote`). Implementation: vendored shadcn `tooltip`
+   (registry-verified for base-mira; wraps the already-installed Base UI tooltip —
+   zero new runtime deps), the row itself as trigger via the `render` prop, restyled to
+   the design's popover look (the vendored file gained a `showArrow` prop — vendored
+   code is ours to customize). It **portals**: the Card is `overflow-hidden` AND the
+   scroll region clips, so the prototype's `overflow: visible` hack was deliberately
+   not ported. `pointer-events-none`, 0-delay provider. Opens on hover in jsdom, so the
+   content is integration-tested. Deferred: keyboard/touch access (every popup value is
+   supplementary; the row text carries the primary data).
+8. **View toggle (new).** All / Bids / Asks segmented control on vendored shadcn
+   `toggle-group` (its registry dependency `toggle.tsx` landed with it). Single-select
+   with the empty-deselect swallowed so exactly one view is always active; a hidden
+   side simply omits its `<tbody>`; the spread strip always renders.
+9. **Formatting (decision 8 upheld against the handoff).** Price = 2dp **lossless**
+   (the sim's 1dp came from its fake 0.5 tick; real BTCUSDT tick is 0.01), size = 5dp
+   lossless (the sim's 3dp would round real 0.00001-step quantities). The only imported
+   formatting is the grouped-thousands look — `groupThousands()` is pure string surgery
+   over the integer part, composing with `formatDecimalString`. Derived floats (totals,
+   mid, spread, popup aggregates) format freely, as before.
+10. **Tokens (handoff verbatim, except one validated nudge).** `--ask` chains to
+    `--destructive` and the six `-muted`/`-border`/`-foreground` variants are verbatim.
+    The bid green was **hue-nudged** after the promised palette-validator run: the
+    handoff's pure-green 149° pair FAILED deutan CVD separation (ΔE 5.2 light / **1.1**
+    dark vs the ≥8 floor; the pre-redesign tokens scored 8.7 / 6.9 because their green
+    deliberately leaned teal). At the handoff's exact lightness/chroma, `--bid` hue
+    149°→**165°** (light, ΔE 9.0 PASS) and 149°→**170°** (dark, ΔE 6.5 — the 6–8 band,
+    legal with secondary encoding, matching the old dark posture). Identity here is
+    never color-alone: sides are positional (above/below the spread) and labeled
+    (column headers, imbalance labels). User-approved trade-off.
+11. **Chrome (design look on our kit).** Card stays the panel shell (zeroed padding,
+    hairline strips inside); the status Badge became the design's **live dot**
+    (`live` → pulsing green `ob-pulse` / `degraded` → static destructive / else static
+    muted, label alongside; still visual-only — the two live-region tiers and the
+    degraded Alert are unchanged). Diagnostics moved to a quiet `text-2xs` mono strip
+    at the panel bottom. `App` adopted the handoff page header (title, subtitle,
+    Bids/Asks badges). **JetBrains Mono** ships via `@fontsource-variable/jetbrains-mono`
+    (5.2.8 — pnpm's release-age supply-chain policy held back the fresh 5.3.0, working
+    as intended) through the one `--font-mono` `@theme` token; `--text-2xs` (10px/14px)
+    joined the type scale. The handoff's `live`/`updateSpeed`/`showDepthBars`/
+    `showImbalance` knobs were not ported (simulation artifacts / no settings UI).
+
 ## Reuse recipe (for the next project)
 
 1. Bring parts 1+2 (transport + sync) per their own chronicles; this layer only needs
    the store contract (`subscribe`/`getState`, commit-stable snapshot) and a top-N
    selector.
 2. Copy `src/features/order-book/` + `src/test/fake-order-book-sync.ts`; vendor
-   `table badge skeleton card alert` via the shadcn CLI.
-3. Add `--bid`/`--ask` tokens and the `book-flash` keyframes to the CSS theme —
-   re-validate colors against YOUR surfaces with the dataviz validator; don't copy
-   blind.
+   `table badge skeleton card alert tooltip toggle-group` via the shadcn CLI (never
+   import `@base-ui/react` directly — shadcn components or hand-built only).
+3. Add the `--bid`/`--ask` token families (base + `-foreground`/`-muted`/`-border`),
+   the `book-flash`/`ob-pulse` keyframes, `--text-2xs`, and the `--font-mono` override
+   to the CSS theme — re-validate colors against YOUR surfaces with the dataviz
+   validator; don't copy blind (the handoff's own greens failed it — see Redesign §10).
 4. Swap `BTCUSDT_DISPLAY` for your symbol record (or wire `exchangeInfo` if you have a
    picker) and mount `<OrderBook/>`.
 5. Keep the invariants: engine created only inside the effect; selectors downstream of

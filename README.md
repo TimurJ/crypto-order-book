@@ -7,8 +7,9 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
 > (`src/lib/connection/`), the server-state/REST layer (TanStack Query v5, `src/lib/query/`,
 > with the Worker's first API route, `/api/health`, as its demo consumer), the **Binance
 > order-book sync layer** (`src/lib/order-book/`) — a live, self-healing local order book —
-> and the **order-book UI** (`src/features/order-book/`) — a slot-keyed mirrored ladder with
-> cumulative depth bars, level-change flashes, and full connection-status UX. The full CI
+> and the **order-book UI** (`src/features/order-book/`) — a design-handoff-styled stacked
+> ladder (asks / spread / bids) with cumulative depth bars, hover aggregates, direction-colored
+> level flashes, and full connection-status UX. The full CI
 > **and** CD pipeline is live:
 > every push deploys across DEV/UAT/PROD on Cloudflare Workers (see
 > [Deployment](#deployment-cloudflare-workers)). The repo also serves as a **reference
@@ -29,8 +30,10 @@ A React 19 + TypeScript single-page app, built with Vite, Tailwind CSS v4, and s
 - A **Binance order-book sync engine** on top of it (spec-exact snapshot + diff-stream
   stitching with gap-detection self-healing, zod-validated payloads; see
   [`docs/order-book-sync-architecture.md`](docs/order-book-sync-architecture.md))
-- A hand-rendered **order-book UI** on top of both (slot-keyed mirrored ladder, cumulative
-  cross-side depth bars, price-diffed level flashes, skeleton/stale-dimmed status UX; see
+- A hand-rendered **order-book UI** on top of both (design-handoff stacked ladder — asks /
+  spread row / bids in one scrollable table — per-side depth bars, an imbalance bar,
+  size-diffed direction-colored flashes, hover cumulative aggregates, a view toggle, and
+  skeleton/stale-dimmed status UX; see
   [`docs/order-book-ui-architecture.md`](docs/order-book-ui-architecture.md))
 - **TanStack Query v5** for REST/server-state (factory-configured client, typed HTTP errors,
   `queryOptions` modules per resource; see

@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type {
   createOrderBookSync,
   OrderBookSnapshot,
@@ -62,32 +63,52 @@ describe("OrderBook", () => {
     expect(created).toHaveLength(0)
   })
 
-  it("shows the skeleton and a visual status badge before the first sync", () => {
+  it("shows the skeleton and a visual live-dot label before the first sync", () => {
     const { fake } = setupConfigured()
     expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true")
-    expect(screen.getByText("idle")).toBeInTheDocument()
+    expect(screen.getByText("Idle")).toBeInTheDocument()
     // The polite live region stays silent until the book is actually available.
     expect(screen.getByRole("status")).not.toHaveTextContent("Order book live")
     act(() => {
       fake.commit({ status: "connecting" })
     })
-    expect(screen.getByText("connecting")).toBeInTheDocument()
+    expect(screen.getByText("Connecting")).toBeInTheDocument()
     expect(screen.getByRole("status")).not.toHaveTextContent("Order book live")
     expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true")
   })
 
-  it("renders the live book with spread, status badge, and diagnostics", () => {
+  it("renders the live book with spread row, live dot, imbalance and diagnostics", () => {
     const { fake } = setupConfigured()
     act(() => {
       fake.commit(liveBook)
     })
-    expect(screen.getByText("live")).toBeInTheDocument()
+    expect(screen.getByText("Live")).toBeInTheDocument()
     // The first successful sync announces availability to the polite region.
     expect(screen.getByRole("status")).toHaveTextContent("Order book live")
     expect(screen.getByText("101.00")).toBeInTheDocument()
     expect(screen.getByText("102.00")).toBeInTheDocument()
-    expect(screen.getByText("spread 1.00 USDT")).toBeInTheDocument()
+    // Mid (101.50) sits in the spread strip; spreadPct = 1/102 ≈ 0.980%.
+    expect(screen.getByText("101.50")).toBeInTheDocument()
+    expect(screen.getByText("Spread 1.00 · 0.980%")).toBeInTheDocument()
+    // Imbalance: bid volume 3.5 vs ask volume 3.5 → an even split.
+    expect(screen.getByText("50% Buy")).toBeInTheDocument()
+    expect(screen.getByText("Sell 50%")).toBeInTheDocument()
     expect(screen.getByText("resyncs 0 · dropped 0")).toBeInTheDocument()
+  })
+
+  it("filters the rendered sides through the view toggle", async () => {
+    const user = userEvent.setup()
+    const { fake } = setupConfigured()
+    act(() => {
+      fake.commit(liveBook)
+    })
+    await user.click(screen.getByRole("button", { name: "Asks" }))
+    expect(screen.queryByText("101.00")).not.toBeInTheDocument()
+    expect(screen.getByText("102.00")).toBeInTheDocument()
+    // The spread strip never disappears with a side.
+    expect(screen.getByText("101.50")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "All" }))
+    expect(screen.getByText("101.00")).toBeInTheDocument()
   })
 
   it("keeps the last-known book visible and dimmed during a resync", () => {
@@ -98,7 +119,7 @@ describe("OrderBook", () => {
     act(() => {
       fake.commit({ status: "syncing" })
     })
-    expect(screen.getByText("syncing")).toBeInTheDocument()
+    expect(screen.getByText("Syncing")).toBeInTheDocument()
     // A routine gap resync must not re-announce to the polite region.
     expect(screen.getByRole("status")).not.toHaveTextContent("Order book live")
     // Never blank on resync: the stale book stays rendered, dimmed.
@@ -111,7 +132,7 @@ describe("OrderBook", () => {
     act(() => {
       fake.commit({ status: "degraded" })
     })
-    expect(screen.getByText("degraded")).toBeInTheDocument()
+    expect(screen.getByText("Degraded")).toBeInTheDocument()
     // Degraded is announced by the assertive Alert only, never the polite region.
     expect(screen.getByRole("alert")).toBeInTheDocument()
     expect(screen.getByRole("status")).not.toHaveTextContent("Order book live")
@@ -152,7 +173,7 @@ describe("OrderBook", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Order book live")
   })
 
-  it("updates the diagnostics footer from the snapshot counters", () => {
+  it("updates the diagnostics strip from the snapshot counters", () => {
     const { fake } = setupConfigured()
     act(() => {
       fake.commit({ ...liveBook, resyncCount: 2, droppedFrames: 1 })

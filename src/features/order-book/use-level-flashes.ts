@@ -1,15 +1,18 @@
 // Level-change flash tracking, keyed BY PRICE, never by slot: a rank shift (every row
 // below an inserted level moves down one slot) must not light the ladder — only a level
-// whose quantity actually changed, or a price newly entering the window, flashes.
+// whose quantity actually changed, or a price newly entering the window, flashes. Each
+// flash carries a DIRECTION (design handoff: green when the size grew, red when it
+// shrank; new-to-window counts as "up" — quantity appeared).
 //
 // Two-layer mechanism. useLevelFlashes diffs the visible window per render and emits the
-// SET of freshly changed prices; useFlashKey (one per slot side, inside the row) folds
-// membership into a slot-local monotonic key. The ladder mounts the flash overlay keyed
-// by that number, so a bump remounts just the overlay and restarts its CSS animation —
-// while a pure rank shift leaves every slot's key untouched (index-keyed rows update in
-// place), which is what makes replayed flashes on row movement impossible. A naive
-// `${price}:${seq}` overlay key fails exactly there: an already-flashed price changing
-// slots would remount and spuriously replay.
+// MAP of freshly changed prices → direction; useRowFlash (one per slot side, inside the
+// row) folds membership into a slot-local monotonic key and latches the direction at
+// bump time, so a parked overlay keeps its color. The ladder mounts the flash overlay
+// keyed by that number, so a bump remounts just the overlay and restarts its CSS
+// animation — while a pure rank shift leaves every slot's key untouched (index-keyed
+// rows update in place), which is what makes replayed flashes on row movement
+// impossible. A naive `${price}:${seq}` overlay key fails exactly there: an
+// already-flashed price changing slots would remount and spuriously replay.
 //
 // Flashes fire ONLY on a continuous `live → live` commit. Every other transition — the
 // first sync, a `syncing`/gap-partial commit, `degraded`, and the edge back into `live` —
@@ -34,21 +37,24 @@ interface PricedLevel {
   qty: string
 }
 
+export type FlashDirection = "up" | "down"
+
 export interface FlashDiff {
   qtyByPrice: ReadonlyMap<string, string>
-  changed: ReadonlySet<string>
+  changed: ReadonlyMap<string, FlashDirection>
 }
 
 export const EMPTY_FLASH_DIFF: FlashDiff = {
   qtyByPrice: new Map(),
-  changed: new Set(),
+  changed: new Map(),
 }
 
 /**
  * Diff the current visible levels against the previously committed ones. When `silent`,
  * record the new baseline WITHOUT flagging any change — used whenever the commit isn't a
  * continuous live-stream update, so a wholesale book swap (first sync / resync) re-baselines
- * instead of lighting the whole ladder.
+ * instead of lighting the whole ladder. Direction compares numerically, so a cosmetic
+ * string change ("1.0" → "1.00") is no change at all.
  */
 export function diffChangedPrices(
   prev: FlashDiff,
@@ -56,21 +62,26 @@ export function diffChangedPrices(
   silent: boolean
 ): FlashDiff {
   const qtyByPrice = new Map<string, string>()
-  const changed = new Set<string>()
+  const changed = new Map<string, FlashDirection>()
   for (const { price, qty } of levels) {
     qtyByPrice.set(price, qty)
-    // Covers both flash cases: qty changed (prev qty differs) and new-to-window (prev qty
-    // undefined). A silent commit records the baseline but flags nothing.
-    if (!silent && prev.qtyByPrice.get(price) !== qty) {
-      changed.add(price)
+    if (silent) continue
+    const prevQty = prev.qtyByPrice.get(price)
+    if (prevQty === undefined) {
+      // New to the window: the quantity appeared out of nothing — an increase.
+      changed.set(price, "up")
+    } else {
+      const delta = Number(qty) - Number(prevQty)
+      if (delta > 0) changed.set(price, "up")
+      else if (delta < 0) changed.set(price, "down")
     }
   }
   return { qtyByPrice, changed }
 }
 
 export interface LevelFlashes {
-  bidFlashes: ReadonlySet<string>
-  askFlashes: ReadonlySet<string>
+  bidFlashes: ReadonlyMap<string, FlashDirection>
+  askFlashes: ReadonlyMap<string, FlashDirection>
 }
 
 export function useLevelFlashes(
@@ -98,14 +109,24 @@ export function useLevelFlashes(
   return { bidFlashes: nextBids.changed, askFlashes: nextAsks.changed }
 }
 
+export interface RowFlash {
+  /** Slot-local monotonic key — the overlay mounts while > 0 and remounts on each bump. */
+  key: number
+  /** Direction latched at the last bump, so a parked overlay keeps its color. */
+  tone: FlashDirection | null
+}
+
 /**
- * Slot-local flash key: bumps once per render in which `fresh` is true. The caller
- * mounts the overlay only while the key is > 0 and keys it by this number — see the
- * module header for why this beats keying by `${price}:${seq}`.
+ * Slot-local flash state: bumps the key once per render in which `direction` is set and
+ * latches that direction as the overlay's tone. The caller mounts the overlay only while
+ * the key is > 0 and keys it by this number — see the module header for why this beats
+ * keying by `${price}:${seq}`.
  */
-export function useFlashKey(fresh: boolean): number {
-  const committed = useRef(0)
-  const next = fresh ? committed.current + 1 : committed.current
+export function useRowFlash(direction: FlashDirection | null): RowFlash {
+  const committed = useRef<RowFlash>({ key: 0, tone: null })
+  const next: RowFlash = direction
+    ? { key: committed.current.key + 1, tone: direction }
+    : committed.current
   useEffect(() => {
     committed.current = next
   })

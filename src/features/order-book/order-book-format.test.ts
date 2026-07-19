@@ -1,4 +1,4 @@
-import { formatDecimalString } from "./order-book-format.ts"
+import { formatDecimalString, groupThousands } from "./order-book-format.ts"
 
 describe("formatDecimalString", () => {
   it("truncates extra fractional digits", () => {
@@ -28,5 +28,33 @@ describe("formatDecimalString", () => {
 
   it("drops the fraction entirely at zero decimals", () => {
     expect(formatDecimalString("67012.34", 0)).toBe("67012")
+  })
+})
+
+describe("groupThousands", () => {
+  it("groups the integer part and leaves the fraction alone", () => {
+    expect(groupThousands("68418.00")).toBe("68,418.00")
+  })
+
+  it("groups seven-plus digit integers with multiple commas", () => {
+    expect(groupThousands("1234567.89")).toBe("1,234,567.89")
+  })
+
+  it("passes short integers through unchanged", () => {
+    expect(groupThousands("999.5")).toBe("999.5")
+  })
+
+  it("handles input with no decimal point", () => {
+    expect(groupThousands("68418")).toBe("68,418")
+  })
+
+  it("never groups fractional digits", () => {
+    expect(groupThousands("0.00012345")).toBe("0.00012345")
+  })
+
+  it("composes with formatDecimalString", () => {
+    expect(groupThousands(formatDecimalString("68418.11999999", 2))).toBe(
+      "68,418.11"
+    )
   })
 })

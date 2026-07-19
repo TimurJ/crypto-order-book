@@ -15,7 +15,7 @@ and Tabler icons). Package manager is **pnpm**.
 > first `/api/*` route, `/api/health`, as its demo consumer), the **Binance order-book sync
 > layer** (`src/lib/order-book/`, part 2 — a live, self-healing local book), and the
 > **order-book UI** (`src/features/order-book/`, part 3 — a manually rendered slot-keyed
-> ladder; the connection stack is complete). The CI **and** CD pipelines are **live** — three-env
+> ladder in the design-handoff stacked look; the connection stack is complete). The CI **and** CD pipelines are **live** — three-env
 > Cloudflare Workers deploy (DEV/UAT/PROD), build-once-promote verified. `main` is
 > branch-protected.
 >
@@ -344,20 +344,27 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
   [`docs/order-book-sync-architecture.md`](docs/order-book-sync-architecture.md).
 - **Order-book UI (part 3 of 3):** `src/features/order-book/` — the rendering layer, a
   **manual** slot-keyed ladder (AG Grid was debated and reserved for a future blotter — a
-  ladder isn't a grid). Hook-owned engine lifecycle (`use-order-book-sync.ts`,
+  ladder isn't a grid), visually restyled to a **design handoff** (a Claude Design bundle,
+  adopted as **look only** — its prototype HTML/logic were never ported; the uncommitted
+  bundle's durable record is the doc's Redesign section). Stacked layout: asks / spread row / bids as three tbodies in ONE real
+  `<table>` — the page's only scroll region (sticky column header, one-shot
+  spread-centering on first sync). Hook-owned engine lifecycle (`use-order-book-sync.ts`,
   StrictMode-safe create-in-effect/destroy-in-cleanup; UI passes `depthLimit: 1000`); pure
-  view-model (`order-book-view.ts` — sorted top-20, cumulative cross-side depth bars,
-  `hasBook`, non-positive-spread guard); price-diffed level flashes (`use-level-flashes.ts`
-  — never flash a rank shift, and only on a `live→live` commit so a resync doesn't flash
-  the whole ladder); lossless string-truncation formatting (`order-book-format.ts` — never
-  `toFixed` an exchange price); skeleton → live → stale-dimmed status UX with a visual-only
-  status Badge plus two a11y live-region tiers (`use-status-announcement.ts` — polite
-  region announces availability, assertive Alert announces problems, never both at once);
-  one real `<table>`, no `aria-live` on streaming data. Built on
-  shadcn Table/Badge/Skeleton/Card/Alert; `--bid`/`--ask` OKLch tokens
-  (validator-checked). Tests inject a fake engine via the `createSync` seam
-  (`src/test/fake-order-book-sync.ts`) — no module mocking. **Decision log, implementation
-  amendments & reuse recipe:**
+  view-model (`order-book-view.ts` — sorted top-20, per-side depth bars, quote sums, derived
+  mid/spreadPct/imbalance, `hasBook`, non-positive-spread guard); size-diffed
+  direction-colored flashes (`use-level-flashes.ts` — never flash a rank shift, and only on
+  a `live→live` commit so a resync doesn't flash the whole ladder) + mid direction memory
+  (`use-mid-direction.ts`); lossless string-truncation formatting (`order-book-format.ts` —
+  never `toFixed` an exchange price; `groupThousands` for the comma look); hover cumulative
+  aggregates via the vendored shadcn Tooltip (portalled — the panel clips); All/Bids/Asks
+  view toggle (vendored toggle-group); skeleton → live → stale-dimmed status UX with a
+  visual-only live dot plus two a11y live-region tiers (`use-status-announcement.ts` —
+  polite region announces availability, assertive Alert announces problems, never both at
+  once); no `aria-live` on streaming data. Built on shadcn
+  Table/Badge/Skeleton/Card/Alert/Tooltip/ToggleGroup; `--bid`/`--ask` OKLch token families
+  (handoff values, bid hue CVD-nudged — validator-checked). Tests inject a fake engine via
+  the `createSync` seam (`src/test/fake-order-book-sync.ts`) — no module mocking.
+  **Decision log, redesign chronicle & reuse recipe:**
   [`docs/order-book-ui-architecture.md`](docs/order-book-ui-architecture.md).
 - **Server-state / REST layer:** **TanStack Query v5**. `createQueryClient()`
   (`src/lib/query/query-client.ts`) owns the defaults (30s `staleTime`, never-retry-4xx/
@@ -407,6 +414,10 @@ never in frontend code. **gitleaks** adds a deeper, full-history secret scan in 
 - Outside `src/components/ui/**`, **do not co-locate non-component exports** (hooks, context,
   `cva` definitions) with components in the same file — split them into their own module. The
   strict `useComponentExportOnlyModules` rule will flag it.
+- **Never import `@base-ui/react` directly in app/feature code.** Base UI exists here purely
+  inside shadcn's vendored components: a needed primitive is either vendored via
+  `pnpm dlx shadcn@latest add <component>` or hand-built from scratch — never hand-wired from
+  Base UI parts. (Vendored files in `src/components/ui/**` are ours to customize.)
 - Never point Biome at CSS. Fix lint findings in code rather than suppressing them.
 - **Never put env-specific config in `VITE_*` vars or `public/`.** It would be baked into the
   bundle (breaking build-once) or, for `public/config.js`, shadow the Worker's `/config.js` route.

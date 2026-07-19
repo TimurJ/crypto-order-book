@@ -29,6 +29,15 @@ describe("App", () => {
     ).toBeInTheDocument()
   })
 
+  it("renders the page-header subtitle and the Bids/Asks badges", () => {
+    renderApp()
+    expect(
+      screen.getByText("BTC/USDT · live depth · Binance spot")
+    ).toBeInTheDocument()
+    expect(screen.getByText("Bids")).toBeInTheDocument()
+    expect(screen.getByText("Asks")).toBeInTheDocument()
+  })
+
   it("renders the order-book widget on its not-configured path", () => {
     // No window.__APP_CONFIG__ in jsdom, so getConfig() falls back to empty URLs —
     // the widget guard renders its explicit state and never constructs an engine.

@@ -54,16 +54,64 @@ describe("selectOrderBookView", () => {
     expect(view.asks.map((l) => l.cumulative)).toEqual([0.5, 1.5, 2])
   })
 
-  it("scales bar percentages to the cross-side max so the thin side stays short", () => {
+  it("scales bar percentages to each side's own max (design's per-side fill)", () => {
     const view = selectOrderBookView(liveSnapshot, 20)
-    // Bid side total 7 vs ask side total 2 — shared denominator is 7.
+    // Bid side total 7, ask side total 2 — each side's worst level reaches 100%.
     expect(view.bids.at(-1)?.barPct).toBe(100)
-    expect(view.asks.at(-1)?.barPct).toBeCloseTo((2 / 7) * 100)
+    expect(view.asks.at(-1)?.barPct).toBe(100)
+    expect(view.bids[0]?.barPct).toBeCloseTo((1 / 7) * 100)
+    expect(view.asks[0]?.barPct).toBeCloseTo((0.5 / 2) * 100)
+  })
+
+  it("accumulates quote sums (Σ price × qty) from the best price down", () => {
+    const view = selectOrderBookView(liveSnapshot, 20)
+    // Bids: 101×1, +100×2, +99×4 · Asks: 102×0.5, +103×1, +104×0.5
+    expect(view.bids.map((l) => l.cumulativeQuote)).toEqual([101, 301, 697])
+    expect(view.asks.map((l) => l.cumulativeQuote)).toEqual([51, 154, 206])
   })
 
   it("derives the spread from best bid and best ask", () => {
     const view = selectOrderBookView(liveSnapshot, 20)
     expect(view.spread).toBeCloseTo(1)
+  })
+
+  it("derives mid and spread percentage alongside the spread", () => {
+    const view = selectOrderBookView(liveSnapshot, 20)
+    expect(view.mid).toBeCloseTo(101.5)
+    expect(view.spreadPct).toBeCloseTo((1 / 102) * 100)
+  })
+
+  it("nulls mid and spreadPct exactly when the spread is null", () => {
+    const crossed = selectOrderBookView(
+      makeSnapshot({
+        lastUpdateId: 1,
+        bids: new Map([["101.00", "1.0"]]),
+        asks: new Map([["100.00", "1.0"]]),
+      }),
+      20
+    )
+    expect(crossed.spread).toBeNull()
+    expect(crossed.mid).toBeNull()
+    expect(crossed.spreadPct).toBeNull()
+  })
+
+  it("computes the imbalance split as whole percents summing to 100", () => {
+    const view = selectOrderBookView(liveSnapshot, 20)
+    // Bid volume 7 vs ask volume 2 → 78% / 22% (rounded).
+    expect(view.imbalance).toEqual({ bidPct: 78, askPct: 22 })
+  })
+
+  it("gives a one-sided book the full imbalance share", () => {
+    const view = selectOrderBookView(
+      makeSnapshot({ lastUpdateId: 1, bids: new Map([["100.00", "1.0"]]) }),
+      20
+    )
+    expect(view.imbalance).toEqual({ bidPct: 100, askPct: 0 })
+  })
+
+  it("nulls the imbalance when the visible window has no volume", () => {
+    const view = selectOrderBookView(makeSnapshot(), 20)
+    expect(view.imbalance).toBeNull()
   })
 
   it("returns a null spread when a side is empty", () => {
