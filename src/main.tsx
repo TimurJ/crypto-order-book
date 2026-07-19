@@ -7,7 +7,6 @@ import "./index.css"
 import { App } from "./App.tsx"
 import { RootErrorBoundary } from "@/components/root-error-boundary.tsx"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
-import { startOrderBookDemo } from "@/lib/order-book/order-book-demo.ts"
 import { createQueryClient } from "@/lib/query/query-client.ts"
 import { reportError } from "@/lib/report-error.ts"
 
@@ -51,13 +50,6 @@ window.addEventListener("error", (event) => {
 // One QueryClient per tab, created once at module scope (an SPA has no SSR request-isolation
 // concern — see docs/tanstack-query-setup.md for the shape to use if that ever changes).
 const queryClient = createQueryClient()
-
-// Part-2 console proof of the order-book data layer — runs outside React (no StrictMode
-// double-mount hazard) in dev/uat until part 3 renders the book (gated out of prod inside
-// startOrderBookDemo). The HMR dispose hook stops the demo's socket/timer when dev-server hot
-// updates replace this module; production has no HMR.
-const stopOrderBookDemo = startOrderBookDemo()
-import.meta.hot?.dispose(stopOrderBookDemo)
 
 createRoot(rootElement, rootOptions).render(
   <StrictMode>

@@ -1,0 +1,261 @@
+import { renderHook } from "@testing-library/react"
+import { StrictMode } from "react"
+import type { OrderBookStatus } from "@/lib/order-book/order-book-sync.ts"
+import {
+  diffChangedPrices,
+  EMPTY_FLASH_DIFF,
+  useLevelFlashes,
+  useRowFlash,
+} from "./use-level-flashes.ts"
+
+const level = (price: string, qty: string) => ({ price, qty })
+
+describe("diffChangedPrices", () => {
+  it("records the baseline without flagging anything when silent", () => {
+    const next = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0"), level("99.00", "2.0")],
+      true
+    )
+    expect(next.changed.size).toBe(0)
+    expect(next.qtyByPrice.get("100.00")).toBe("1.0")
+  })
+
+  it("flags nothing on a silent commit even when quantities changed", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0")],
+      true
+    )
+    // A wholesale swap arriving on a non-streaming commit (resync) re-baselines, not flashes.
+    const next = diffChangedPrices(
+      first,
+      [level("100.00", "9.9"), level("50.00", "1.0")],
+      true
+    )
+    expect(next.changed.size).toBe(0)
+    expect(next.qtyByPrice.get("100.00")).toBe("9.9")
+  })
+
+  it("flags a quantity increase as up and a decrease as down", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0"), level("99.00", "2.0")],
+      true
+    )
+    const next = diffChangedPrices(
+      first,
+      [level("100.00", "2.0"), level("99.00", "0.5")],
+      false
+    )
+    expect(next.changed.get("100.00")).toBe("up")
+    expect(next.changed.get("99.00")).toBe("down")
+  })
+
+  it("does not flag a cosmetic string change with equal numeric value", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0")],
+      true
+    )
+    const next = diffChangedPrices(first, [level("100.00", "1.00")], false)
+    expect(next.changed.size).toBe(0)
+  })
+
+  it("does not flag a pure rank shift", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0"), level("99.00", "2.0")],
+      true
+    )
+    // Same prices and quantities, different slot order — nothing changed.
+    const next = diffChangedPrices(
+      first,
+      [level("99.00", "2.0"), level("100.00", "1.0")],
+      false
+    )
+    expect(next.changed.size).toBe(0)
+  })
+
+  it("flags a price newly entering the window as up", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0")],
+      true
+    )
+    const next = diffChangedPrices(
+      first,
+      [level("100.00", "1.0"), level("101.00", "0.5")],
+      false
+    )
+    expect(next.changed.get("101.00")).toBe("up")
+    expect(next.changed.has("100.00")).toBe(false)
+  })
+
+  it("clears the flag on the following unchanged diff", () => {
+    let state = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0")],
+      true
+    )
+    state = diffChangedPrices(state, [level("100.00", "2.0")], false)
+    state = diffChangedPrices(state, [level("100.00", "2.0")], false)
+    expect(state.changed.size).toBe(0)
+  })
+
+  it("drops departed prices so the tracking map never grows unbounded", () => {
+    const first = diffChangedPrices(
+      EMPTY_FLASH_DIFF,
+      [level("100.00", "1.0"), level("101.00", "0.5")],
+      true
+    )
+    const next = diffChangedPrices(first, [level("100.00", "1.0")], false)
+    expect(next.qtyByPrice.has("101.00")).toBe(false)
+    expect(next.qtyByPrice.size).toBe(1)
+    // A departed price re-entering counts as new-to-window (up) again.
+    const back = diffChangedPrices(
+      next,
+      [level("100.00", "1.0"), level("101.00", "0.7")],
+      false
+    )
+    expect(back.changed.get("101.00")).toBe("up")
+  })
+})
+
+describe("useLevelFlashes", () => {
+  type Props = {
+    bids: { price: string; qty: string }[]
+    asks: { price: string; qty: string }[]
+    status: OrderBookStatus
+  }
+
+  const liveBook: Props = {
+    bids: [level("100.00", "1.0")],
+    asks: [level("101.00", "1.0")],
+    status: "live",
+  }
+
+  it("flashes only while streaming live→live, per side, with direction", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook }
+    )
+    // First live commit is the silent baseline.
+    expect(result.current.bidFlashes.size).toBe(0)
+    rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
+    expect(result.current.askFlashes.size).toBe(0)
+    // A re-render without a data change must not re-flash.
+    rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
+    expect(result.current.bidFlashes.size).toBe(0)
+  })
+
+  it("re-baselines silently on a resync instead of flashing the swapped book", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook }
+    )
+    // Gap → resync: the engine freezes (syncing), then commits a wholesale-new book on live.
+    rerender({ ...liveBook, status: "syncing" })
+    rerender({
+      bids: [level("200.00", "5.0")],
+      asks: [level("201.00", "5.0")],
+      status: "live",
+    })
+    expect(result.current.bidFlashes.size).toBe(0)
+    expect(result.current.askFlashes.size).toBe(0)
+    // The next live streaming update flashes normally again.
+    rerender({
+      bids: [level("200.00", "9.0")],
+      asks: [level("201.00", "5.0")],
+      status: "live",
+    })
+    expect(result.current.bidFlashes.get("200.00")).toBe("up")
+  })
+
+  it("does not flash a changed book committed while still syncing (gap-partial)", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook }
+    )
+    // A gap inside the buffered run commits a changed partial book while status is "syncing".
+    rerender({ ...liveBook, bids: [level("100.00", "7.0")], status: "syncing" })
+    expect(result.current.bidFlashes.size).toBe(0)
+  })
+
+  it("re-baselines silently on degraded recovery", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook }
+    )
+    rerender({ ...liveBook, status: "degraded" })
+    rerender({
+      bids: [level("300.00", "2.0")],
+      asks: [level("301.00", "2.0")],
+      status: "live",
+    })
+    expect(result.current.bidFlashes.size).toBe(0)
+    expect(result.current.askFlashes.size).toBe(0)
+  })
+
+  it("flashes returning levels when a side empties then refills while live", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook }
+    )
+    // Bid side empties (still live — a thin book, not a resync).
+    rerender({ ...liveBook, bids: [] })
+    expect(result.current.bidFlashes.size).toBe(0)
+    // ...then refills: the returning level must flash (new-to-window ⇒ up), not be silenced.
+    rerender(liveBook)
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
+  })
+
+  it("does not double-bump flashes under StrictMode's double render", () => {
+    const { result, rerender } = renderHook(
+      ({ bids, asks, status }: Props) => useLevelFlashes(bids, asks, status),
+      { initialProps: liveBook, wrapper: StrictMode }
+    )
+    rerender({ ...liveBook, bids: [level("100.00", "2.0")] })
+    expect(result.current.bidFlashes.get("100.00")).toBe("up")
+    expect(result.current.bidFlashes.size).toBe(1)
+  })
+})
+
+describe("useRowFlash", () => {
+  type Props = { direction: "up" | "down" | null }
+
+  it("bumps once per flagged render and holds otherwise", () => {
+    const { result, rerender } = renderHook(
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: null } as Props }
+    )
+    expect(result.current).toEqual({ key: 0, tone: null })
+    rerender({ direction: "up" })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
+    rerender({ direction: null })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
+    rerender({ direction: "down" })
+    expect(result.current).toEqual({ key: 2, tone: "down" })
+  })
+
+  it("latches the tone while parked so the overlay keeps its color", () => {
+    const { result, rerender } = renderHook(
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: "down" } as Props }
+    )
+    expect(result.current).toEqual({ key: 1, tone: "down" })
+    rerender({ direction: null })
+    rerender({ direction: null })
+    expect(result.current).toEqual({ key: 1, tone: "down" })
+  })
+
+  it("does not double-bump under StrictMode's double render", () => {
+    const { result, rerender } = renderHook(
+      ({ direction }: Props) => useRowFlash(direction),
+      { initialProps: { direction: null } as Props, wrapper: StrictMode }
+    )
+    rerender({ direction: "up" })
+    expect(result.current).toEqual({ key: 1, tone: "up" })
+  })
+})
