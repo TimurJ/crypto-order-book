@@ -87,7 +87,7 @@ It **relies on** config that already existed:
 | `commits` | **Commit messages (commitlint)** | **PR only** (`if: github.event_name == 'pull_request'`) | checkout `fetch-depth: 0` → `wagoid/commitlint-github-action`, using the `commitlint` config in `package.json`. Adds `pull-requests: read`. Backstop to the local `commit-msg` hook. |
 | `test` | **Test (Vitest)** | PR + push to `main` | *Added later with the test harness — see [`docs/vitest-setup.md`](vitest-setup.md). Same setup block as `verify`, runs `pnpm test:run`.* |
 | `shell` | **Shell lint (shellcheck)** | PR + push to `main` | *Added later.* Checkout-only (no pnpm/node) → `bash -n` + `shellcheck` on `scripts/*.sh`, and `shellcheck --shell=sh` on the Husky hooks. Guards the release script's portability (GNU ↔ BSD) and syntax — nothing else lints shell (Biome is ts/tsx-only). |
-| `dependency-review` | **Dependency review** | **PR only** (`if: github.event_name == 'pull_request'`) | *Added later.* Checkout-only → `actions/dependency-review-action` with `fail-on-severity: moderate`. Blocks a PR introducing a dependency with a moderate-or-higher known advisory (reads GitHub's dependency-review API; the dependency graph is on for this public repo). Inherits `contents: read` — findings in the job summary, no PR comment. |
+| `dependency-review` | **Dependency review** | **PR only** (`if: github.event_name == 'pull_request'`) | *Added later.* Checkout-only → `actions/dependency-review-action` with `fail-on-severity: moderate`. Blocks a PR introducing a dependency with a moderate-or-higher known advisory (reads GitHub's dependency-review API; the dependency graph is on for this public repo). Inherits `contents: read` — findings in the job summary, so no `pull-requests: write` is needed. Vulnerability-gating only: the action's `license-check` half no-ops without an allow/deny list, and its default `runtime` scope keeps dev-tooling advisories quiet. |
 
 `verify` and `test` are the only jobs that install dependencies; `secrets`, `commits`, `shell`, and
 `dependency-review` need only a checkout. `commits` and `dependency-review` are PR-gated: on a push to
@@ -180,6 +180,32 @@ high-value section for "next time."
    *Cause:* a plain `pnpm install` will mutate/relax the lockfile.
    *Fix:* `pnpm install --frozen-lockfile` — CI fails if `pnpm-lock.yaml` is out of sync, forcing the
    lockfile to be committed.
+
+7. **`CodeQL` looks "required but never posted" — a false alarm.**
+   *Symptom:* auditing branch protection, the required context `CodeQL` appears on no check-runs for
+   `main`, suggesting it will hang every PR forever.
+   *Cause:* CodeQL **default setup** posts the umbrella check-run named exactly `CodeQL` **on pull
+   requests** (alongside per-language `Analyze (actions)` / `Analyze (javascript-typescript)` runs). On a
+   direct **push to `main`** it posts only the `Analyze (...)` runs — no `CodeQL`. Diffing required
+   contexts against a push commit therefore always looks broken.
+   *Fix:* branch protection evaluates at PR-merge time on the **PR head commit**, where `CodeQL` does
+   post — so verify against a recent PR head
+   (`gh api repos/OWNER/REPO/commits/<pr-head-sha>/check-runs`), never the merge commit. Note contexts
+   are also satisfiable by legacy commit *statuses* (`commits/<sha>/status`), not just check-runs, so
+   check both before concluding a context is missing.
+
+8. **commitlint never sees the string that lands on `main`.**
+   *Symptom:* the required "Commit messages (commitlint)" check is green, yet the subject on `main` is not
+   a Conventional Commit.
+   *Cause:* the repo allows **squash merges only** (`allow_merge_commit` and `allow_rebase_merge` are both
+   false) and squashes with `squash_merge_commit_title: PR_TITLE`, so the **PR title** becomes the commit
+   subject. Gotcha 4's job lints the *branch's commit range*, which the title is not part of; and the
+   squash commit is created at merge time, after every check has already reported.
+   *Fix:* there is nothing to configure — the title is a human gate. Write PR titles as Conventional
+   Commits and don't rely on the required check to catch a bad one. Confirm the settings with
+   `gh api repos/{owner}/{repo} --jq '{t: .squash_merge_commit_title, m: .squash_merge_commit_message}'`.
+   (`PR_BODY` supplies the commit body, which is why an unwrapped PR body is also the commit body — safe
+   here, since `body-max-line-length` is disabled; see `docs/dependabot-setup.md` §4.1.)
 
 ---
 

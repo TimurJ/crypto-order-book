@@ -88,6 +88,14 @@ behind the setup.
 
 For the full migration history, the decisions, and the gotchas, see [`docs/biome-setup.md`](docs/biome-setup.md).
 
+### Working with Claude Code
+
+Working rules for anyone using Claude Code in this repo live in [`.claude/rules/`](.claude/rules) —
+tracked topic files (git boundary, planning, code style, verification, GitHub workflow) that the tool
+loads automatically every session, alongside [`CLAUDE.md`](./CLAUDE.md). Feature-level conventions live in
+a per-directory `CLAUDE.md` (e.g. [`src/features/order-book/`](src/features/order-book)), which loads only
+when Claude works in that folder.
+
 ## Testing
 
 Tests run on **[Vitest](https://vitest.dev)** with **React Testing Library** in a jsdom environment.
