@@ -8,8 +8,9 @@ explicitly reviewed and approved — this layer is the **reference pattern** for
 connections get built in future projects), the failure-mode matrix, and the reuse recipe.
 
 > Part 1 (the app-generic transport) is chronicled in
-> [`ws-transport-architecture.md`](ws-transport-architecture.md); part 3 (rendering) is
-> pending. No UI yet — `order-book-demo.ts` proves the layer in the browser console (dev/uat).
+> [`ws-transport-architecture.md`](ws-transport-architecture.md); part 3 (the rendered
+> ladder, `src/features/order-book/`) is chronicled in
+> [`order-book-ui-architecture.md`](order-book-ui-architecture.md) and consumes this store.
 
 ## The problem this layer solves
 
@@ -93,7 +94,7 @@ still latches `"degraded"` instead of resetting to zero on every reopen.
 
 ### 3. Book storage: `Map<priceString, qty>` per side, sort-on-read
 Writes dominate (10 frames/s × dozens of levels; Map upsert/delete is O(1)); reads are
-~1/s (demo) and throttled in part 3. `selectTopLevels` (`book-levels.ts`) sorts when a
+once per commit (~10/s, the part-3 view-model). `selectTopLevels` (`book-levels.ts`) sorts when a
 reader asks, using `Number(price)` for **comparison only** — the exact string prices remain
 the identity (floats as keys would corrupt it: Binance prices are exact decimals). If
 part-3 profiling ever shows read-sorting matters, a sorted index can be added behind the
@@ -145,16 +146,19 @@ very integration this layer exists to get right. Tests drive everything through 
 | `rateLimitFloorMs` | 30 000 after 429/418 | respects Binance's escalating-ban policy — never retry a rate-limit "soon". Held as a `performance.now()` deadline, not just the retry timer, so a transport reconnect inside the window can't bypass it |
 | `bufferLimit` | 1000 events (~100s of stream) | dropping *oldest* is unsound (pre-snapshot you can't know what's covered), so overflow aborts the attempt; the frame in hand seeds the next buffer, so continuity survives |
 | `degradedAfterAttempts` | 3 | early enough to matter as a signal, late enough to skip blips |
-| stream | `@depth@100ms`, demo symbol BTCUSDT | the real-time variant part 3 wants |
+| stream | `@depth@100ms`, symbol BTCUSDT | the real-time variant the part-3 ladder renders |
 
 ### 9. Ships to deployed envs now (demo + CSP + config vars)
-The console demo runs in dev/uat until part 3 replaces it (gated out of prod — a live Binance
-client for every real visitor is not what the plain app should do; the gate is in-app, so the
-CSP and `vars` stay env-identical), so `connect-src` gained both `.vision` origins in
+A console demo (`order-book-demo.ts`) ran in dev/uat until part 3 replaced it with the
+rendered ladder (demo retired in the same change). It was gated out of prod because real
+users shouldn't see dev console logging — the same hygiene as shipping no prod source
+maps; the Binance connection itself was never the concern (the part-3 UI connects in prod
+by design). The gate was in-app, so the CSP and `vars` stayed env-identical: `connect-src`
+gained both `.vision` origins in
 `public/_headers` and the `vars` were filled in the same change. This
-deliberately proves deployed CSP + Binance connectivity end-to-end **before** UI work
-depends on them — a CSP mistake surfaces as a refused connection in the DEV console now,
-not mid-part-3. The origins are env-identical (public market data has no per-env tier),
+deliberately proved deployed CSP + Binance connectivity end-to-end **before** UI work
+depended on them — a CSP mistake surfaces as a refused connection in the DEV console, not
+mid-part-3. The origins are env-identical (public market data has no per-env tier),
 which is exactly what lets the CSP stay in the static `_headers`
 ([`security-headers-setup.md`](security-headers-setup.md)). The invariant is
 test-enforced, not prose-only: `binance-hosts.test.ts` reads `wrangler.jsonc`, the vite
@@ -177,8 +181,10 @@ src/lib/order-book/
                          BinanceSchemaError, fetchDepthSnapshot (zod-parsed, abortable)
   order-book-sync.ts     createOrderBookSync — the engine + store
   book-levels.ts         selectTopLevels — pure sort-on-read
-  order-book-demo.ts     console proof (dev/uat); started from main.tsx (module scope, outside React)
 ```
+
+(The former `order-book-demo.ts` — the pre-UI console proof — was retired when part 3
+landed; the rendering consumer lives in `src/features/order-book/`.)
 
 Engine internals worth knowing before touching:
 
@@ -235,8 +241,10 @@ always a safe local response to garbage.
   ([`ws-transport-architecture.md` §consumer contract](ws-transport-architecture.md)):
   never create it in `useMemo`/`useState`/module scope inside React.
 - `subscribe`/`getState` plug into `useSyncExternalStore` directly. Snapshot identity
-  changes on every commit (~10/s while live) — **throttle at the render layer**
-  (`useDeferredValue`, interval sampling); the data layer will not slow down for you.
+  changes on every commit (~10/s while live); the data layer will not slow down for you.
+  Part 3 measured that rate and renders per commit unthrottled (decision 3 in
+  [`order-book-ui-architecture.md`](order-book-ui-architecture.md)); a consumer that does
+  need pacing throttles at the render layer (a wrapper store, `useDeferredValue`).
 - The Maps in the snapshot are live references — **read, never mutate**; take
   `selectTopLevels` for ordered slices.
 - `status` drives UX: `connecting` (no socket), `syncing` (dance in flight — book may hold
@@ -293,8 +301,9 @@ moves into the Worker ([`security-headers-setup.md`](security-headers-setup.md))
 
 ## Roadmap
 
-- **Part 3 — rendering**: grid + depth visualization on `useSyncExternalStore`, render-side
-  throttling, `degraded`/`connecting` UX, and removal of `order-book-demo.ts`.
+- **Part 3 — rendering**: ✅ landed (`src/features/order-book/` — the slot-keyed ladder,
+  `degraded`/`connecting` UX, demo removed); chronicled in
+  [`order-book-ui-architecture.md`](order-book-ui-architecture.md).
 - **Multi-symbol**: one engine per symbol is the intended model (engines are cheap; the
   transport supports 1024 streams/connection if a combined-stream multiplexer ever becomes
   worth it — that would be a new decision, not a tweak).

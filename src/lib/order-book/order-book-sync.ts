@@ -51,6 +51,25 @@ export interface OrderBookSnapshot {
   droppedFrames: number
 }
 
+/**
+ * The empty-book snapshot: status "idle", no levels, zeroed counters, fresh Maps per call.
+ * Single source of the pre-sync/idle shape for consumers that need one before an engine
+ * exists — the React hook's `useSyncExternalStore` fallback and the test fake — so adding
+ * a snapshot field is a one-line change here, not a scavenger hunt. The running engine
+ * builds its own snapshots from live state (`buildSnapshot`), not from this.
+ */
+export function createIdleSnapshot(symbol = ""): OrderBookSnapshot {
+  return {
+    status: "idle",
+    symbol,
+    bids: new Map(),
+    asks: new Map(),
+    lastUpdateId: 0,
+    resyncCount: 0,
+    droppedFrames: 0,
+  }
+}
+
 export interface OrderBookSyncOptions {
   /** Binance symbol, e.g. "BTCUSDT" (lowercased for the stream path). */
   symbol: string

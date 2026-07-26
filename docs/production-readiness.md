@@ -3,13 +3,15 @@
 A grounded audit of what `crypto-order-book` still needs to be production-ready, based on the
 actual state of the repo (source, both CI/CD workflows, wrangler/vite config, gitignore).
 
-> **Status context:** This is still an **early scaffold** — `src/App.tsx` is the shadcn starter
-> page. The first domain subsystem (the reconnecting WebSocket transport, `src/lib/connection/` —
-> see [`docs/ws-transport-architecture.md`](ws-transport-architecture.md)) has landed; the
-> order-book sync + rendering layers on top of it are still pending. The tooling/CI/CD foundation
-> (Biome, git hooks, GitHub Actions, three-env Cloudflare CD) is strong. The single most important
-> "production-ready" need is the actual app; everything below is the foundation to lay
-> before/alongside the features.
+> **Status context:** The full connection stack has landed — the reconnecting WebSocket
+> transport (`src/lib/connection/`, [`ws-transport-architecture.md`](ws-transport-architecture.md)),
+> the order-book sync engine (`src/lib/order-book/`,
+> [`order-book-sync-architecture.md`](order-book-sync-architecture.md)), and the rendered
+> ladder (`src/features/order-book/`,
+> [`order-book-ui-architecture.md`](order-book-ui-architecture.md)) — `src/App.tsx` now
+> renders the live order book in every env. The tooling/CI/CD foundation
+> (Biome, git hooks, GitHub Actions, three-env Cloudflare CD) is strong. Everything below is
+> the operational foundation around that app.
 
 Items are ordered by impact. Tier 1 closes real holes; Tier 2 is production operations; Tier 3 is
 polish.

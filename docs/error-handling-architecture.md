@@ -120,7 +120,11 @@ The real order-book data resilience — separate from, and bigger than, the Reac
   (in place, over the live socket) — **delivered**; the full matrix is in
   [`order-book-sync-architecture.md`](order-book-sync-architecture.md).
 - Surface fatal widget failures via `showBoundary`; log non-fatal ones via `reportError` —
-  the remaining piece, owned by part 3 (there is no widget yet to surface into).
+  still open by explicit decision: part 3 landed the order-book widget but skipped a
+  per-widget boundary, because while App is essentially that one widget the root boundary
+  already has widget granularity. The trigger to add one is the second widget (the
+  planned blotter) — recorded in
+  [`order-book-ui-architecture.md`](order-book-ui-architecture.md), decision 9.
 
 ## References
 

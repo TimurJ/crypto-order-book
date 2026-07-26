@@ -7,7 +7,8 @@ testing harness, and the roadmap for the layers that build on it (order-book syn
 > **Status:** implemented **2026-07-11** (PR #34), reviewed in depth **2026-07-18**.
 > This is **part 1 of the connection stack** — part 2 (the Binance order-book *sync* layer,
 > [`order-book-sync-architecture.md`](order-book-sync-architecture.md)) is its first real
-> consumer; part 3 (rendering) is pending.
+> consumer; part 3 (the rendered ladder,
+> [`order-book-ui-architecture.md`](order-book-ui-architecture.md)) completes the stack.
 >
 > This is the long-form architecture record. The short version lives in
 > [`CLAUDE.md`](../CLAUDE.md#architecture) (rationale) and [`README.md`](../README.md#tech-stack)
@@ -186,7 +187,9 @@ socket instead. Full chronicle:
 [`order-book-sync-architecture.md`](order-book-sync-architecture.md).
 
 ### Part 3 — rendering layer
-The order-book UI (grid + depth visualization) consuming the sync layer's store.
+✅ Landed: the order-book UI (`src/features/order-book/` — slot-keyed ladder + depth bars)
+consumes the sync layer's store via `useSyncExternalStore`; chronicled in
+[`order-book-ui-architecture.md`](order-book-ui-architecture.md).
 
 ### Per-env endpoint → CSP into the Worker
 `vars.WS_URL` now carries the (env-identical) Binance market-data host, so `connect-src` is
