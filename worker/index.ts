@@ -7,13 +7,13 @@
 //
 // Security headers: the static document + assets get theirs from public/_headers (served directly
 // by Static Assets). Cloudflare's `_headers` does NOT apply to Worker-generated responses, so
-// /config.js sets its own header (nosniff) in configResponse — see worker/config-response.ts.
+// /config.js sets its own header (nosniff) in configResponse — see worker/configResponse.ts.
 //
 // Future API routes / Durable Object + Container bindings branch here before the ASSETS fallback.
 
-import { configResponse, type RuntimeConfigEnv } from "./config-response.ts"
-import { healthResponse } from "./health-response.ts"
-import { apiNotFoundResponse } from "./not-found-response.ts"
+import { configResponse, type RuntimeConfigEnv } from "./configResponse.ts"
+import { healthResponse } from "./healthResponse.ts"
+import { apiNotFoundResponse } from "./notFoundResponse.ts"
 
 interface Env extends RuntimeConfigEnv {
   ASSETS: Fetcher

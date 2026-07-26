@@ -37,9 +37,9 @@ The optional `queryKey` field (populated by the query channel) maps onto Sentry'
 the swap happens. Known double-report: a query opting into `throwOnError` reports from both the
 cache seam and the boundary, with distinct `source` tags — informative, not a bug.
 
-Source: `src/components/root-error-boundary.tsx` (boundary + fallback), `src/lib/report-error.ts`
+Source: `src/components/RootErrorBoundary.tsx` (boundary + fallback), `src/lib/reportError.ts`
 (the seam), `src/main.tsx` (the `createRoot` hooks + `window` listeners),
-`src/lib/connection/ws-transport.ts` (the transport channel), `src/lib/order-book/` (the sync
+`src/lib/connection/wsTransport.ts` (the transport channel), `src/lib/order-book/` (the sync
 channel).
 
 ## Architecture decisions

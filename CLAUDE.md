@@ -39,6 +39,8 @@ is the full detail behind the section here. Read it before changing a subsystem.
   (vendored shadcn primitives co-locate `cva` variants by design).
 - `noRestrictedImports` gates the **feature barrel**: the pattern `**/features/*/**` makes a deep import
   into `src/features/*` an error. Matched on the written specifier, not the resolved path.
+- `useFilenamingConvention` pins filenames to `["camelCase", "PascalCase"]` — PascalCase components,
+  camelCase everything else; vendored `src/components/ui/**` exempt. `.claude/rules/code-style.md`.
 - **Fix lint findings in code — do not add `biome-ignore` / `eslint-disable`** unless unavoidable.
 
 ## Testing — Vitest
@@ -49,7 +51,7 @@ is the full detail behind the section here. Read it before changing a subsystem.
 - `vitest.config.ts` `mergeConfig`s `vite.config.ts`, so tests inherit the `@`→`src` alias and plugins.
 - Type isolation is a dedicated **`tsconfig.test.json`** (4th project reference, like the Worker's), so
   `pnpm build` type-checks tests too.
-- Components touching `useQuery` render via `renderWithClient` (`src/test/render-with-client.tsx`) —
+- Components touching `useQuery` render via `renderWithClient` (`src/test/renderWithClient.tsx`) —
   seed the cache before mount for fetch-free determinism.
 - Assert via roles/text, not implementation details.
 
@@ -130,7 +132,7 @@ never in `vars` in `wrangler.jsonc`, which are public.
 
 - **Entry:** `index.html` (`#root`) → `src/main.tsx`, which guards the root element (no `!` assertion).
 - **Theming:** class-based dark mode — `ThemeProvider` toggles `.dark` on the root element; consume it via
-  `useTheme()` from `src/components/theme-context.ts`. The anti-flash swap **requires the CSP's
+  `useTheme()` from `src/components/themeContext.ts`. The anti-flash swap **requires the CSP's
   `style-src 'unsafe-inline'`**. [`docs/theming-architecture.md`](docs/theming-architecture.md)
 - **UI / styling:** shadcn components in `src/components/ui/`; `cn()` in `src/lib/utils.ts` merges classes.
   Tailwind v4 lives in `src/index.css`, dark mode wired by `@custom-variant dark (&:is(.dark *))`.
@@ -138,12 +140,12 @@ never in `vars` in `wrangler.jsonc`, which are public.
 - **Hosting / Worker:** `worker/index.ts` is a thin Worker (own runtime, no DOM) serving static assets,
   the per-env `/config.js` and `/api/health`. `/api/*` is Worker territory, so an unmatched `/api/*` path
   returns a JSON **404**, never the SPA fallback's `index.html`. Every Worker-generated response shares one
-  header builder (`worker/no-store-response.ts`). Wrangler bundles the Worker at deploy time, not `vite`.
+  header builder (`worker/noStoreResponse.ts`). Wrangler bundles the Worker at deploy time, not `vite`.
 - **Runtime config:** env-specific values reach the client via `/config.js` (`window.__APP_CONFIG__`),
-  never `import.meta.env`; read it through `src/lib/app-config.ts` (`getConfig()`). The `runtimeConfig`
+  never `import.meta.env`; read it through `src/lib/appConfig.ts` (`getConfig()`). The `runtimeConfig`
   Vite plugin injects the script tag so it's never bundled, and serves local twins of all three Worker
   routes in `pnpm dev` **and** `pnpm preview`.
-- **Connection layer (1 of 3):** `src/lib/connection/ws-transport.ts` — an app-generic, protocol-agnostic
+- **Connection layer (1 of 3):** `src/lib/connection/wsTransport.ts` — an app-generic, protocol-agnostic
   reconnecting WebSocket transport; it already owns full-jitter backoff, connect timeout and an opt-in
   staleness watchdog. Instances are **single-use** (`destroy()` is terminal) and consumers must follow the
   doc's consumer contract. [`docs/ws-transport-architecture.md`](docs/ws-transport-architecture.md)
@@ -160,11 +162,11 @@ never in `vars` in `wrangler.jsonc`, which are public.
   feature dir (no inline keys/fns in components), queryFns always forward `signal`, and Query is for
   request/response only — streaming stays on the WS layer. [`docs/tanstack-query-setup.md`](docs/tanstack-query-setup.md)
 - **Error handling:** `RootErrorBoundary` wraps the app; every error channel funnels through one
-  Sentry-ready seam, `reportError()` in `src/lib/report-error.ts`. React 19's prod-only `createRoot` hooks
+  Sentry-ready seam, `reportError()` in `src/lib/reportError.ts`. React 19's prod-only `createRoot` hooks
   plus global `window` handlers cover the async/uncaught cases a boundary can't.
   [`docs/error-handling-architecture.md`](docs/error-handling-architecture.md)
 - **Security headers:** CSP plus the hardening set and HSTS, split across **`public/_headers`** and
-  **`worker/no-store-response.ts`** — Cloudflare's `_headers` does **not** apply to Worker-generated
+  **`worker/noStoreResponse.ts`** — Cloudflare's `_headers` does **not** apply to Worker-generated
   responses. `script-src` stays a clean `'self'` (the load-bearing lock); `connect-src`/`style-src` are
   project-specific, and the CSP can stay static in the build-once `_headers` only because every env's
   `vars` carry the **same** Binance hosts. [`docs/security-headers-setup.md`](docs/security-headers-setup.md)

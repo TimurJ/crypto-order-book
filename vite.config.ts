@@ -27,7 +27,7 @@ function runtimeConfig(): Plugin {
     contentType: string,
     status = 200
   ): void => {
-    // Node-side mirror of worker/no-store-response.ts (the ServerResponse↔Response platform
+    // Node-side mirror of worker/noStoreResponse.ts (the ServerResponse↔Response platform
     // boundary rules out sharing the builder itself).
     res.statusCode = status
     res.setHeader("content-type", contentType)

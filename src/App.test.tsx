@@ -1,8 +1,8 @@
 import { screen } from "@testing-library/react"
 import { App } from "./App.tsx"
 import { type AppHealth, healthQueryOptions } from "@/features/health"
-import { createTestQueryClient } from "@/test/query-client.ts"
-import { renderWithClient } from "@/test/render-with-client.tsx"
+import { createTestQueryClient } from "@/test/queryClient.ts"
+import { renderWithClient } from "@/test/renderWithClient.tsx"
 
 // App renders HealthStatus (useQuery), so it needs a QueryClientProvider. Seeding the health
 // entry BEFORE render means the data is fresh (within staleTime) — no fetch is attempted, so

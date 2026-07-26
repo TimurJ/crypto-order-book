@@ -12,16 +12,16 @@ decision log: [`docs/order-book-ui-architecture.md`](../../../docs/order-book-ui
 - `lib/` here is this feature's own pure helpers. It is **not** `src/lib/order-book/`, which is the
   part-2 sync engine — near-identical paths, so read the import twice before trusting it.
 - `ui/` here is this feature's own components. It is **not** `@/components/ui/**`, the vendored shadcn
-  primitives they import — both appear in the same import block in `ui/order-book-ladder.tsx`.
+  primitives they import — both appear in the same import block in `ui/OrderBookLadder.tsx`.
   `biome.json`'s one `overrides` carve-out names the vendored path only, so `ui/**` here gets no
   exemption from `useComponentExportOnlyModules`.
 
 ## Prices and formatting
 
 - **Never `parseFloat().toFixed()` an exchange price.** `toFixed` *rounds*, and a rounded price is a level
-  that does not exist in the book. Format through `lib/order-book-format.ts` — pure string truncation.
+  that does not exist in the book. Format through `lib/orderBookFormat.ts` — pure string truncation.
 - Truncation is lossless only while `decimals` >= the symbol's tick/step digits, and that guarantee lives in
-  the `SymbolDisplay` record (`lib/symbol-display.ts`). Adding a symbol means getting its decimals right there.
+  the `SymbolDisplay` record (`lib/symbolDisplay.ts`). Adding a symbol means getting its decimals right there.
 - `groupThousands` composes **after** truncating, never before.
 - Floats are for *derived* values only — mid, spreadPct, imbalance. Never a price or a size.
 
@@ -47,7 +47,7 @@ decision log: [`docs/order-book-ui-architecture.md`](../../../docs/order-book-ui
 ## Tests
 
 - Inject the fake engine through the `createSync` default-parameter seam
-  (`src/test/fake-order-book-sync.ts`) — **never `vi.mock`**.
+  (`src/test/fakeOrderBookSync.ts`) — **never `vi.mock`**.
 - Drive state with `commit()`; listeners fire synchronously, so no fake timers are needed.
 - Keep `createSync` referentially stable across renders. It sits in the effect's dependency array, so a
   fresh identity re-creates the engine on every render.
@@ -56,7 +56,7 @@ decision log: [`docs/order-book-ui-architecture.md`](../../../docs/order-book-ui
 
 - A real `<table>`, and **no `aria-live` on streaming data**.
 - Two tiers, never both at once: the polite region announces availability, the assertive Alert announces
-  problems (`model/use-status-announcement.ts`).
+  problems (`model/useStatusAnnouncement.ts`).
 
 ## Rendering approach
 

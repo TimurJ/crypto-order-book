@@ -94,7 +94,7 @@ still latches `"degraded"` instead of resetting to zero on every reopen.
 
 ### 3. Book storage: `Map<priceString, qty>` per side, sort-on-read
 Writes dominate (10 frames/s × dozens of levels; Map upsert/delete is O(1)); reads are
-once per commit (~10/s, the part-3 view-model). `selectTopLevels` (`book-levels.ts`) sorts when a
+once per commit (~10/s, the part-3 view-model). `selectTopLevels` (`bookLevels.ts`) sorts when a
 reader asks, using `Number(price)` for **comparison only** — the exact string prices remain
 the identity (floats as keys would corrupt it: Binance prices are exact decimals). If
 part-3 profiling ever shows read-sorting matters, a sorted index can be added behind the
@@ -161,7 +161,7 @@ depended on them — a CSP mistake surfaces as a refused connection in the DEV c
 mid-part-3. The origins are env-identical (public market data has no per-env tier),
 which is exactly what lets the CSP stay in the static `_headers`
 ([`security-headers-setup.md`](security-headers-setup.md)). The invariant is
-test-enforced, not prose-only: `binance-hosts.test.ts` reads `wrangler.jsonc`, the vite
+test-enforced, not prose-only: `binanceHosts.test.ts` reads `wrangler.jsonc`, the vite
 `devConfig`, and `_headers` and fails if the hosts diverge or the CSP stops admitting them
 (the smoke script checks `/config.js` contents, not CSP admittance).
 
@@ -176,11 +176,11 @@ obscures it (the same reasoning that kept MSW out of the ws-transport suite). Re
 
 ```
 src/lib/order-book/
-  binance-schemas.ts     zod schemas + inferred types (DepthUpdate, DepthSnapshot)
-  binance-rest.ts        BinanceHttpError (extends HttpError, + code/binanceMsg),
+  binanceSchemas.ts     zod schemas + inferred types (DepthUpdate, DepthSnapshot)
+  binanceRest.ts        BinanceHttpError (extends HttpError, + code/binanceMsg),
                          BinanceSchemaError, fetchDepthSnapshot (zod-parsed, abortable)
-  order-book-sync.ts     createOrderBookSync — the engine + store
-  book-levels.ts         selectTopLevels — pure sort-on-read
+  orderBookSync.ts     createOrderBookSync — the engine + store
+  bookLevels.ts         selectTopLevels — pure sort-on-read
 ```
 
 (The former `order-book-demo.ts` — the pre-UI console proof — was retired when part 3
@@ -253,10 +253,10 @@ always a safe local response to garbage.
 - Endpoints come from `getConfig()` (`wsUrl`, `binanceRestUrl`) — never hardcode, never
   `VITE_*`.
 
-## Testing notes (`order-book-sync.test.ts`, 23 cases)
+## Testing notes (`orderBookSync.test.ts`, 23 cases)
 
 Reuses part 1's entire harness discipline: `FakeWebSocket` (now shared from
-`src/test/fake-web-socket.ts`), fake timers (incl. faked `performance.now()` for the
+`src/test/fakeWebSocket.ts`), fake timers (incl. faked `performance.now()` for the
 watchdog), `Math.random → 0.5` for exact jitter delays, bounded `advanceTimersByTime` only,
 every engine destroyed in `afterEach`. Engine tests run through the **real transport** —
 integration is the point. New tricks this suite adds:
@@ -276,18 +276,18 @@ integration is the point. New tricks this suite adds:
 
 ## Config & CSP wiring (what a new exchange/env would touch)
 
-`AppConfig` (`src/lib/app-config.ts`) + `RuntimeConfigEnv`/`configResponse`
-(`worker/config-response.ts`) + per-env `vars` (`wrangler.jsonc`) + `devConfig`
-(`vite.config.ts`) + the exact-shape asserts in `app-config.test.ts` /
-`config-response.test.ts` — one field rides all six surfaces. CSP: `connect-src` in
+`AppConfig` (`src/lib/appConfig.ts`) + `RuntimeConfigEnv`/`configResponse`
+(`worker/configResponse.ts`) + per-env `vars` (`wrangler.jsonc`) + `devConfig`
+(`vite.config.ts`) + the exact-shape asserts in `appConfig.test.ts` /
+`configResponse.test.ts` — one field rides all six surfaces. CSP: `connect-src` in
 `public/_headers` lists both origins statically; if origins ever differ per env, the CSP
 moves into the Worker ([`security-headers-setup.md`](security-headers-setup.md)).
 
 ## Reuse recipe (next project / next exchange)
 
-1. Bring part 1 (`ws-transport`) unchanged, plus `report-error.ts` with a reserved source.
-2. Port `binance-schemas.ts` to the target exchange's payloads (zod, tolerant objects,
-   string tuples) and `binance-rest.ts` to its snapshot endpoint + error-body shape
+1. Bring part 1 (`ws-transport`) unchanged, plus `reportError.ts` with a reserved source.
+2. Port `binanceSchemas.ts` to the target exchange's payloads (zod, tolerant objects,
+   string tuples) and `binanceRest.ts` to its snapshot endpoint + error-body shape
    (subclass the repo's `HttpError` equivalent).
 3. The engine's skeleton transfers wholesale **if** the exchange uses the same
    sequence-numbered diff + snapshot model (most do). Re-verify against *their* spec:
