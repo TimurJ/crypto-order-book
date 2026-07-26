@@ -170,6 +170,19 @@ uses above, an accepted trade-off for a manual check.
 > ≥7-days-old" pick would have landed on the broken 11.12.0. We pinned **11.11.0** instead — aged,
 > never deprecated, and the maintainers' recommended fallback for that bug.
 
+**How that pin is *enforced* — `pmOnFail: download`.** `pmOnFail: download` in `pnpm-workspace.yaml` makes
+pnpm read `package.json`'s `packageManager` field and download + run the pinned version (verifying a signed
+release) whenever the local pnpm differs — so any global pnpm v11+ converges on the repo's version, with no
+Corepack involved. It is pnpm 11's *default*, pinned explicitly so a future default flip can't change
+behaviour silently (self-documenting, like `engineStrict`). Its other values do **not** download: `error`
+fails on a version mismatch, `warn` warns and continues, `ignore` skips the check.
+
+**Gotcha — do not reintroduce the settings it superseded.** `pmOnFail` replaced **three** settings that
+pnpm 11 removed — `managePackageManagerVersions`, `packageManagerStrict`, and
+`packageManagerStrictVersion` — plus the `COREPACK_ENABLE_STRICT` env var. Setting any of them now does
+nothing; the likely way it happens is copying config in from an older project. CI is unaffected either
+way: `pnpm/action-setup` provisions pnpm from the same `packageManager` field and never uses Corepack.
+
 ### 4.6 Other CI jobs on Dependabot PRs (verified fine)
 
 `verify`/`test` need no secrets; `pnpm install --frozen-lockfile` succeeds because Dependabot updates

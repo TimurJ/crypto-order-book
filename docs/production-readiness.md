@@ -62,8 +62,8 @@ error-handling doc's roadmap).
 - [x] `worker/config-response.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
   Worker-generated responses (verified: `curl -I /config.js` shows nosniff but no CSP)
 - [x] `script-src` is a clean `'self'` (the load-bearing lock; verified against
-  `public/_headers`/`dist/index.html`); `style-src` allows `'unsafe-inline'` for the order-book grid +
-  Base UI popup `<style>` injection — a deliberate, ~0-value-to-lock call (see the security-headers doc)
+  `public/_headers`/`dist/index.html`); `style-src` allows `'unsafe-inline'` for the Base UI popup +
+  theme anti-flash `<style>` injection — a deliberate, ~0-value-to-lock call (see the security-headers doc)
 - [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
   `wrangler dev` + `curl`
 - [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
