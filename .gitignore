@@ -37,3 +37,6 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code — machine-local permissions (the shared rules in .claude/rules/ stay tracked)
+.claude/settings.local.json

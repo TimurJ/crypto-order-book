@@ -1,6 +1,6 @@
 # WebSocket transport — architecture & decisions
 
-The app-generic reconnecting WebSocket transport (`src/lib/connection/ws-transport.ts`) — the
+The app-generic reconnecting WebSocket transport (`src/lib/connection/wsTransport.ts`) — the
 decisions behind it, the consumer contract, the spec-level nuances it was audited against, the
 testing harness, and the roadmap for the layers that build on it (order-book sync, rendering).
 
@@ -118,7 +118,7 @@ shaped the way it is:
 
 ## Testing
 
-`src/lib/connection/ws-transport.test.ts` — the harness decisions and their gotchas:
+`src/lib/connection/wsTransport.test.ts` — the harness decisions and their gotchas:
 
 - **Hand-rolled `FakeWebSocket`**, not MSW: the transport needs precise control over event
   *timing and ordering* (late events from superseded sockets, error-then-close, close during
@@ -159,9 +159,9 @@ project) picks them up knowingly:
 
 This module is designed to be lifted wholesale:
 
-1. Copy `src/lib/connection/ws-transport.ts` + `backoff.ts` + `ws-transport.test.ts`.
+1. Copy `src/lib/connection/wsTransport.ts` + `backoff.ts` + `wsTransport.test.ts`.
 2. Satisfy its **single dependency**: the `reportError(error, { source })` seam
-   (`@/lib/report-error.ts`). Either bring the seam (recommended — see
+   (`@/lib/reportError.ts`). Either bring the seam (recommended — see
    [`error-handling-architecture.md`](error-handling-architecture.md)) or stub it with
    `console.error`.
 3. Test harness prerequisites: Vitest + jsdom + fake timers per

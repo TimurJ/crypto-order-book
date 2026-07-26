@@ -18,19 +18,19 @@ fetch-shaped (exchange metadata, health, later account data) belongs here. The o
 that looks like an exception — the Binance depth *snapshot* — is deliberately **not** routed
 through Query: it's an imperatively-timed step inside the sync handshake that must always be
 fresh, so caching semantics are actively harmful there. The sync engine calls
-`fetchDepthSnapshot` (`src/lib/order-book/binance-rest.ts`) directly, exactly as planned —
+`fetchDepthSnapshot` (`src/lib/order-book/binanceRest.ts`) directly, exactly as planned —
 see [`order-book-sync-architecture.md`](order-book-sync-architecture.md).
 
 ## What's implemented today
 
 | Piece | File |
 |---|---|
-| `QueryClient` factory (defaults + reporting seam) | `src/lib/query/query-client.ts` |
-| `HttpError`/`ParseError` + `fetchJson` transport primitive | `src/lib/query/fetch-json.ts` |
+| `QueryClient` factory (defaults + reporting seam) | `src/lib/query/queryClient.ts` |
+| `HttpError`/`ParseError` + `fetchJson` transport primitive | `src/lib/query/fetchJson.ts` |
 | Provider + devtools mount | `src/main.tsx` |
-| Demo resource (`queryOptions` module) | `src/features/health/health-query.ts` |
-| Demo consumer (house rendering posture) | `src/features/health/health-status.tsx` |
-| Test client + provider-wrapped render | `src/test/query-client.ts`, `src/test/render-with-client.tsx` |
+| Demo resource (`queryOptions` module) | `src/features/health/healthQuery.ts` |
+| Demo consumer (house rendering posture) | `src/features/health/HealthStatus.tsx` |
+| Test client + provider-wrapped render | `src/test/queryClient.ts`, `src/test/renderWithClient.tsx` |
 
 ## The mental model
 
@@ -53,7 +53,7 @@ the failure machinery only works if the queryFn throws on HTTP errors — that t
 
 ### 1. A factory, not a singleton
 
-`createQueryClient()` (`src/lib/query/query-client.ts`) is called once at module scope in
+`createQueryClient()` (`src/lib/query/queryClient.ts`) is called once at module scope in
 `main.tsx` — one client per tab. Tests call the *same factory* per-test for isolated caches
 with identical defaults (zero drift between app and test behaviour). There is deliberately no
 exported client instance: React code reaches it via `useQueryClient()`, which keeps components
@@ -84,13 +84,13 @@ browser is offline (`fetchStatus: 'paused'`, not an error) and resumes on reconn
 
 ### 3. `HttpError`/`ParseError` + `fetchJson` — the HTTP error model
 
-`src/lib/query/fetch-json.ts`, three exports:
+`src/lib/query/fetchJson.ts`, three exports:
 
 - **`HttpError extends Error`** with a readonly `status`. A *class* because the retry
   predicate narrows with `instanceof`; message carries status + URL but **never the response
   body** (unbounded; may embed arbitrary server output into logs). Richer clients that need
   the error-code JSON bodies **subclass `HttpError`** so `status < 500` keeps working on
-  their errors — `BinanceHttpError` (`src/lib/order-book/binance-rest.ts`) is the live
+  their errors — `BinanceHttpError` (`src/lib/order-book/binanceRest.ts`) is the live
   example: it captures Binance's `{ code, msg }` off the error body into fields while
   inheriting the message/status contract.
 - **`ParseError extends Error`** — the *other* typed failure mode: HTTP succeeded but the body
@@ -114,7 +114,7 @@ schema-parsed at its client boundary** — in a `queryOptions` module for Query-
 (`const parsed = Schema.parse(await fetchJson<unknown>(…))` — the parse failure then flows
 through the normal error machinery, and the TS type comes from the schema for free). zod
 **entered the repo with the order-book layer** exactly on this rule: Binance payloads are
-parsed in `src/lib/order-book/binance-schemas.ts` (see
+parsed in `src/lib/order-book/binanceSchemas.ts` (see
 [`order-book-sync-architecture.md`](order-book-sync-architecture.md)); `fetchJson` itself
 stays schema-free.
 
@@ -142,7 +142,7 @@ Components call `useQuery` and branch on `isPending`/`error` — every widget ow
 loading/error UI, degraded states stay local (pairs with `throwOnError: false`).
 **Last-known-good wins:** v5 keeps cached `data` when a *background* refetch fails, so check
 `data` before `error` — a widget should only degrade when it has nothing to show, never flip a
-healthy display on a transient blip (`health-status.tsx` is the living example: `isPending` →
+healthy display on a transient blip (`HealthStatus.tsx` is the living example: `isPending` →
 `!data` → render `data`).
 `useSuspenseQuery` (non-nullable `data`, loading/errors as control flow) is the deliberate
 upgrade for route-level data where the whole view is meaningless without it — it *requires* a
@@ -156,7 +156,8 @@ in one component run **sequentially** (first suspends before the second executes
 The query key is a cache entry's **identity by value** — dedup, staleness, and invalidation
 all key off it, and a typo silently creates a second entry rather than erroring. So: **no
 inline `queryKey`/`queryFn` in components, ever.** Each resource gets one module in its
-feature directory (`src/features/<feature>/<resource>-query.ts`) exporting a
+feature directory (`src/features/<feature>/[api/]<resource>-query.ts` — the `api/`
+segment once the feature is split, per `.claude/rules/code-style.md`) exporting a
 `<resource>QueryOptions()` function — key, queryFn (with `signal` forwarding), and
 per-resource tuning in one typed unit. `queryOptions()` (the v5 identity helper) links the
 key to the data type, so `useQuery(fooQueryOptions())`, `prefetchQuery`, and
@@ -203,22 +204,22 @@ they were pinned:
 Hosting implementation + deploy-gate assertions: [`cd-setup.md`](cd-setup.md).
 
 Consumer chain, each file the living example of its house rule:
-`health-query.ts` (options module, trusted cast) → `health-status.tsx` (useQuery posture,
+`healthQuery.ts` (options module, trusted cast) → `HealthStatus.tsx` (useQuery posture,
 last-known-good display, degraded line only with no data) → mounted in `App.tsx`.
 
 ## Testing recipe
 
-- **`createTestQueryClient()`** (`src/test/query-client.ts`): the real factory + two
+- **`createTestQueryClient()`** (`src/test/queryClient.ts`): the real factory + two
   overrides. `retry: false` — error tests otherwise wait through real backoff (~3s/query).
   `gcTime: Infinity` — finite gc schedules eviction timers that fire after teardown
   (act-warnings, hung-worker noise); Infinity schedules nothing and the client dies with the
   test.
-- **`renderWithClient(ui, client?)`** (`src/test/render-with-client.tsx`): RTL render inside a
+- **`renderWithClient(ui, client?)`** (`src/test/renderWithClient.tsx`): RTL render inside a
   fresh provider; returns the client for cache seeding/assertions. Pass your own client to
   seed **before** mount (`setQueryData` → data is fresh within `staleTime` → no fetch fired,
   fully deterministic — how `App.test.tsx` avoids network entirely).
 - **Layered mocking:** component tests seed the cache or mock at the queryFn level (no network
-  concepts); the transport seam (`fetch-json.test.ts`) and one end-to-end case per feature
+  concepts); the transport seam (`fetchJson.test.ts`) and one end-to-end case per feature
   mock `globalThis.fetch` itself. **MSW stays deferred — deliberately re-decided when the
   Binance layer (its original trigger) landed:** the sync engine's tests need exact control
   over *when* the snapshot resolves relative to buffered stream frames, which deferred-promise
@@ -230,7 +231,7 @@ last-known-good display, degraded line only with no data) → mounted in `App.ts
 - **No fake timers around queries** — retries/gc/interval internals interact badly with
   `vi.useFakeTimers`; use real timers + `findBy*`/`waitFor` (fast, thanks to `retry: false`).
 - The retry predicate is tested through a real client with per-query `retryDelay: 0`
-  (`query-client.test.ts`) — behaviour, not implementation.
+  (`queryClient.test.ts`) — behaviour, not implementation.
 
 ## What you lose without ESLint (and why it's covered)
 
@@ -251,7 +252,7 @@ PRs do; a human bumping one by hand bumps both).
 
 | Deferred | Trigger |
 |---|---|
-| ~~zod validation~~ | **done** — landed with the order-book layer (`binance-schemas.ts`); Query-routed third-party resources parse in their `queryOptions` module per the house rule |
+| ~~zod validation~~ | **done** — landed with the order-book layer (`binanceSchemas.ts`); Query-routed third-party resources parse in their `queryOptions` module per the house rule |
 | MSW | re-deferred at the Binance layer (deterministic-timing rationale above); revisit if request/response-shaped REST surface grows |
 | Key factories | first feature with a *family* of keys invalidated together |
 | `useSuspenseQuery` | per-widget error-boundary work (route-level data) |
@@ -267,7 +268,7 @@ PRs do; a human bumping one by hand bumps both).
    one exists).
 3. In your entry file: create the client once at module scope, wrap the app in
    `QueryClientProvider`, add `<ReactQueryDevtools initialIsOpen={false} />` inside it.
-4. Copy `src/test/query-client.ts` + `src/test/render-with-client.tsx`; any component test
+4. Copy `src/test/queryClient.ts` + `src/test/renderWithClient.tsx`; any component test
    touching `useQuery` renders via `renderWithClient`.
 5. Implement the `/api/health` contract in your hosting idiom + local twins (dev **and**
    preview, exact-matched, with a JSON 404 for unmatched API paths); copy

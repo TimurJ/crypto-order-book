@@ -5,13 +5,9 @@
 // operational chrome, kept from the pre-redesign shell.
 
 import { Badge } from "@/components/ui/badge.tsx"
-import { HealthStatus } from "@/features/health/health-status.tsx"
-import { OrderBook } from "@/features/order-book/order-book.tsx"
-import {
-  BTCUSDT_DISPLAY,
-  formatPair,
-} from "@/features/order-book/symbol-display.ts"
-import { getConfig } from "@/lib/app-config.ts"
+import { HealthStatus } from "@/features/health"
+import { BTCUSDT_DISPLAY, formatPair, OrderBook } from "@/features/order-book"
+import { getConfig } from "@/lib/appConfig.ts"
 
 export function App() {
   const { env } = getConfig()

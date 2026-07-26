@@ -5,7 +5,7 @@ along the way, and a from-scratch recipe to reproduce it on the next project.
 
 > **Status:** live since **2026-06-28**. 94 tests green across 16 files; wired into the pre-push hook
 > and a dedicated CI `test` job. Type-checked as part of `pnpm build`. Shared doubles live in
-> `src/test/` (`fake-web-socket.ts` and `silence-console-error.ts` serve both connection-stack suites).
+> `src/test/` (`fakeWebSocket.ts` and `silenceConsoleError.ts` serve both connection-stack suites).
 >
 > This is the long-form history. The short versions live in
 > [`README.md`](../README.md#testing) (how-to) and [`CLAUDE.md`](../CLAUDE.md#testing--vitest)
@@ -68,7 +68,7 @@ adversarial review — which flagged two real things to verify: that `vite.confi
   two projects.
 - **`src/App.test.tsx`** — RTL smoke test: `render(<App />)`, assert the heading, the button, and the
   `env: local` fallback render.
-- **`src/lib/app-config.test.ts`** — unit test of `getConfig()`'s fallback vs injected-config paths.
+- **`src/lib/appConfig.test.ts`** — unit test of `getConfig()`'s fallback vs injected-config paths.
 
 **Edited files**
 
@@ -233,12 +233,12 @@ versions to whatever the registry shows is current — and **re-verify the Vites
 - **Run modes:** `pnpm test` (watch, dev) · `pnpm test:run` (one-shot, CI/pre-push) ·
   `pnpm test:ui` (browser dashboard) · `pnpm test:coverage` (v8 report).
 - **Where tests live:** beside the code they cover, as `*.test.ts` / `*.test.tsx`.
-- **No mocking for `<App />`:** `getConfig()` (`src/lib/app-config.ts`) falls back to
+- **No mocking for `<App />`:** `getConfig()` (`src/lib/appConfig.ts`) falls back to
   `{ env: "local", … }` when `window.__APP_CONFIG__` is unset — the jsdom case — so components render
   against that fallback without stubbing.
 - **Query harness** (added with the TanStack Query layer): components that call `useQuery` render
-  via `renderWithClient` (`src/test/render-with-client.tsx`) — a fresh per-test client built by
-  `createTestQueryClient` (`src/test/query-client.ts`) from the *real* app factory with `retry:
+  via `renderWithClient` (`src/test/renderWithClient.tsx`) — a fresh per-test client built by
+  `createTestQueryClient` (`src/test/queryClient.ts`) from the *real* app factory with `retry:
   false` (no backoff waits in error tests) + `gcTime: Infinity` (no post-teardown gc timers). Seed
   the cache before mount (`client.setQueryData`) for fetch-free determinism — `src/App.test.tsx` is
   the reference. Mocking layers, the console-spy-the-seam move, and the no-fake-timers rule:

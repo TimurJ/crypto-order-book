@@ -26,7 +26,7 @@ polish.
 - [x] Wire `pnpm test:run` into `.husky/pre-push` (after `pnpm build`)
 - [x] Add a CI `test` job to `.github/workflows/ci.yml` (mirrors the `verify` setup block)
 - [x] Isolate test types in `tsconfig.test.json` (4th project ref; `tsc -b` type-checks tests)
-- [x] Seed coverage: `src/App.test.tsx` (RTL smoke) + `src/lib/app-config.test.ts` (unit)
+- [x] Seed coverage: `src/App.test.tsx` (RTL smoke) + `src/lib/appConfig.test.ts` (unit)
 - [x] **Follow-up (user/git):** add the **Test** check to `main`'s required branch-protection checks
       once it has run on a PR
 
@@ -37,10 +37,10 @@ runs locally (watch/UI/coverage), on pre-push, and in CI as a distinct check.
 ### 2. Root error boundary ✅ DONE
 - [x] Top-level React error boundary + fallback UI around `<App />` in `src/main.tsx`
       (`RootErrorBoundary` + `RootErrorFallback`, built on `react-error-boundary`)
-- [x] Sentry-ready reporting seam `reportError()` (`src/lib/report-error.ts`) — every channel funnels through it
+- [x] Sentry-ready reporting seam `reportError()` (`src/lib/reportError.ts`) — every channel funnels through it
 - [x] React 19 prod-only `createRoot` hooks (`onUncaughtError`/`onRecoverableError`) + global `window`
       `unhandledrejection`/`error` handlers for the async/uncaught errors a boundary can't catch
-- [x] Test: `src/components/root-error-boundary.test.tsx` (throw → fallback → recover)
+- [x] Test: `src/components/RootErrorBoundary.test.tsx` (throw → fallback → recover)
 - [ ] **Deferred:** per-widget error boundaries (one bad widget shouldn't kill the page) — when widgets exist
 - [ ] **Deferred:** swap `reportError` → Sentry (see #4)
 - [ ] **Deferred:** route-level boundaries — when a router is added
@@ -59,12 +59,12 @@ error-handling doc's roadmap).
   `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options` + CSP `frame-ancestors`,
   `Referrer-Policy`, `Permissions-Policy` (empty-allowlist `feature=()` syntax), HSTS (plain
   `max-age` — `.dev` is already preload-forced, so no `includeSubDomains`/`preload`)
-- [x] `worker/config-response.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
+- [x] `worker/configResponse.ts` sets `nosniff` on `/config.js` — `_headers` can't reach
   Worker-generated responses (verified: `curl -I /config.js` shows nosniff but no CSP)
 - [x] `script-src` is a clean `'self'` (the load-bearing lock; verified against
-  `public/_headers`/`dist/index.html`); `style-src` allows `'unsafe-inline'` for the order-book grid +
-  Base UI popup `<style>` injection — a deliberate, ~0-value-to-lock call (see the security-headers doc)
-- [x] Regression test (`worker/config-response.test.ts`) + worker-test wiring; verified live via
+  `public/_headers`/`dist/index.html`); `style-src` allows `'unsafe-inline'` for the Base UI popup +
+  theme anti-flash `<style>` injection — a deliberate, ~0-value-to-lock call (see the security-headers doc)
+- [x] Regression test (`worker/configResponse.test.ts`) + worker-test wiring; verified live via
   `wrangler dev` + `curl`
 - [ ] **Deferred:** per-env `connect-src` (exchange `wss://` origins) → move CSP into the Worker
       when endpoints diverge per env (a build-once `_headers` file is env-identical). The consumer
@@ -147,13 +147,13 @@ CI/security posture cleanly.
       degrades to a no-art `summary` card until then
 - [ ] **Deferred:** sync `theme-color` to the app's manual `d`-key/`localStorage` theme override
       (media-based tags track the **OS** scheme only) — would wire `applyTheme()` in
-      `theme-provider.tsx`; also tracked in the
+      `ThemeProvider.tsx`; also tracked in the
       [`theming-architecture.md` Roadmap](theming-architecture.md#roadmap)
 
 ### 8. Onboarding templates ✅ DONE
 - [x] Add `.env.example` — a documented **signpost**, not a var list: the app consumes **zero**
       build-time/client env vars (no `VITE_*`), so it explains that env-specific config is runtime
-      via `/config.js` (`getConfig()` in `src/lib/app-config.ts`; dev via `vite.config.ts`, deployed
+      via `/config.js` (`getConfig()` in `src/lib/appConfig.ts`; dev via `vite.config.ts`, deployed
       via `wrangler.jsonc` `vars`) and points Worker secrets to `.dev.vars.example`
 - [x] Add `.dev.vars.example` — documented placeholder for the **future** Worker-secrets path
       (copy → `.dev.vars` locally; `wrangler secret put <NAME> --env <env>` in deployed envs). No

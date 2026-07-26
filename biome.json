@@ -31,7 +31,24 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "useComponentExportOnlyModules": "error"
+        "useComponentExportOnlyModules": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["camelCase", "PascalCase"]
+          }
+        },
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["**/features/*/**"],
+                "message": "Import the feature as a directory — its index.ts is the public API (.claude/rules/code-style.md)."
+              }
+            ]
+          }
+        }
       }
     },
     "domains": {
@@ -44,7 +61,8 @@
       "linter": {
         "rules": {
           "style": {
-            "useComponentExportOnlyModules": "off"
+            "useComponentExportOnlyModules": "off",
+            "useFilenamingConvention": "off"
           }
         }
       }

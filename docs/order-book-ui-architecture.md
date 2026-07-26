@@ -50,7 +50,7 @@ socket runs with no consumer, teaches nothing reusable.
 The engine's snapshot is rebuilt per commit and referentially stable between commits —
 already the `getSnapshot` contract, so the hook wires `subscribe`/`getState` straight
 in (module-level stable idle-snapshot + noop-subscribe constants cover pre-mount).
-`selectOrderBookView(snapshot, levelCount)` (`order-book-view.ts`) is a pure function
+`selectOrderBookView(snapshot, levelCount)` (`lib/orderBookView.ts`) is a pure function
 memoized on snapshot identity: sorted top-N via the engine's `selectTopLevels`,
 cumulative sums, bar percentages, spread, `hasBook`.
 
@@ -76,11 +76,11 @@ rendering in background tabs (WS delivery isn't throttled like timers), so tab-r
 shows a current book; rAF coalescing would silently freeze hidden tabs.
 
 ### 4. Decomposition & the test seam — DI by default parameter
-`use-order-book-sync.ts` (lifecycle + store read) / `order-book-view.ts` (pure
-view-model) / `order-book.tsx` (container: config guard, status chrome) /
-`order-book-ladder.tsx` (presentational, props-only). The hook's `createSync` option
+`model/useOrderBookSync.ts` (lifecycle + store read) / `lib/orderBookView.ts`
+(pure view-model) / `ui/OrderBook.tsx` (container: config guard, status chrome) /
+`ui/OrderBookLadder.tsx` (presentational, props-only). The hook's `createSync` option
 defaults to the real `createOrderBookSync`; the container forwards it as an optional
-prop. Tests inject `src/test/fake-order-book-sync.ts` — a controllable, synchronous
+prop. Tests inject `src/test/fakeOrderBookSync.ts` — a controllable, synchronous
 implementation of the four-method `OrderBookSync` interface. No module mocking
 anywhere; the engine's own suite covers continuity math, the UI suites never re-test it.
 
@@ -89,7 +89,7 @@ Row *i* = *i*-th best level per side (slot = rank — maps 1:1 onto slot-keyed
 rendering); columns `Amount | Bid ‖ Ask | Amount`, prices hugging the center gutter,
 spread strip above; half the height of a stacked ladder and survives phone widths
 without a layout switch. `LEVEL_COUNT = 20` (a prop end-to-end, so a density toggle is
-free). Base/quote/decimals come from a `SymbolDisplay` record (`symbol-display.ts`) —
+free). Base/quote/decimals come from a `SymbolDisplay` record (`lib/symbolDisplay.ts`) —
 **never** derived by splitting the symbol string (breaks the first time a quote isn't
 4 chars); the record is exactly what an `exchangeInfo` lookup populates when a symbol
 picker arrives (verified: tickSize 0.01 → 2 price decimals, stepSize 0.00001 → 5 qty
@@ -137,7 +137,7 @@ effect — StrictMode's double render computes identical results instead of
 double-bumping.
 
 ### 8. Formatting — lossless string truncation; floats only for derived values
-`formatDecimalString` (`order-book-format.ts`): find the dot, truncate or zero-pad —
+`formatDecimalString` (`lib/orderBookFormat.ts`): find the dot, truncate or zero-pad —
 never `parseFloat().toFixed()`, which ROUNDS, and a rounded price is a level that
 doesn't exist. Lossless by construction while display decimals ≥ tick/step digits
 (the `SymbolDisplay` record guarantees it). Derived values (spread, bar %, cumulative)
@@ -227,7 +227,7 @@ positioning — that's the vendored-code model working as intended.
    remounts its overlay (new key under an index-keyed row) and spuriously replays the
    animation — a rank-shift flash, exactly what decision 7 forbids. Fix: fresh-set +
    slot-local flash key (see decision 7). Same semantics, no spurious replays;
-   `use-flash-sequences.ts` became `use-level-flashes.ts`.
+   `use-flash-sequences.ts` became `useLevelFlashes.ts`.
 2. **`noArrayIndexKey` vs slot keys.** Biome errors on `key={index}` inside a map
    callback. The design *is* index-keyed on purpose (slots never reorder), so the
    honest refactor — not a suppression — was to make the slot list the mapped
@@ -266,7 +266,7 @@ fixed to the "production-ready + documented reference" bar:
   visual-only — keeping the load-complete/recovery announcement (WCAG 4.1.3) that a blunt
   "drop the live region" fix would have lost.
 - **F4 — crossed/locked spread guard** (decision 8): a non-positive spread renders "—".
-- **F6 — shared `createIdleSnapshot` factory** (`order-book-sync.ts`): the empty-book
+- **F6 — shared `createIdleSnapshot` factory** (`orderBookSync.ts`): the empty-book
   snapshot shape had been hand-built in both the hook and the test fake; one factory now
   sources both (the running engine still builds its own snapshots from live state).
 
@@ -330,7 +330,7 @@ What changed, decision by decision:
    `(bestBid + bestAsk) / 2` — because the sync layer streams depth only; there is no
    trade stream, hence no last price (user decision). `mid`/`spreadPct` share the
    crossed-book null-guard with `spread` exactly. The ▲/▼ direction needs cross-commit
-   memory the pure view-model must not hold, so it lives in `use-mid-direction.ts`
+   memory the pure view-model must not hold, so it lives in `model/useMidDirection.ts`
    (same ref-committed-in-effect purity pattern as the flash hooks; latches while mid
    holds still, wipes on null).
 6. **Row selection: dropped (user decision).** The prototype's whole-row `<button>`
@@ -380,12 +380,69 @@ What changed, decision by decision:
     joined the type scale. The handoff's `live`/`updateSpeed`/`showDepthBars`/
     `showImbalance` knobs were not ported (simulation artifacts / no settings UI).
 
+## Restructure — ui / model / lib + public barrel
+
+The feature shipped as 22 files flat in one directory (14 source + 8 co-located
+tests). At that size the flat folder stopped paying for itself: container,
+presentational rows, React hooks and pure functions were indistinguishable at a
+glance, and nothing marked which files were the public surface. Restructured to
+the standard React feature-folder shape — Feature-Sliced Design's `ui`/`model`/
+`lib` segments — plus a public-API barrel. A pure move: no logic, no behaviour and
+no test assertion changed, and the suite ran 23 files / 180 tests before and
+after.
+
+1. **The split rule — what the file *does*, not what it imports.** `ui/` renders
+   JSX; `model/` touches the React runtime (the four `use*` modules); `lib/`
+   touches none of it (view-model, formatter, symbol record). Explicitly *not*
+   "does it import React?" — under the automatic JSX runtime five of the seven
+   `ui/` source files (`DepthRow`, `ImbalanceBar`, `LiveIndicator`,
+   `SpreadRow`, `ViewToggle`) import nothing from `react`, and that question
+   would file all five in `lib/`. `.claude/rules/code-style.md` is the normative
+   statement, including the order the tests apply in. Tests stay beside their
+   subject.
+2. **`model/`, not `hooks/`.** The folder is defined by what it *holds* — state —
+   rather than by the `use` prefix, so a plain store or reducer landing there
+   later needs no rename. It is also FSD's name for the segment (the *slice* in
+   FSD terms is `order-book` itself; `ui`/`model`/`lib` are its segments).
+3. **`index.ts` is the public API.** It re-exports `OrderBook`, the two symbol
+   helpers `App` consumes (the `BTCUSDT_DISPLAY` record and `formatPair`), and
+   `SymbolDisplay`, which types `OrderBook`'s `display` prop. Skipping the barrel
+   was rejected: without it every consumer hard-codes an internal path like
+   `.../ui/OrderBook.tsx`, so any later reshuffle becomes a cross-repo edit. It
+   does **not** trip `useComponentExportOnlyModules` (verified by `pnpm lint`,
+   which is read-only — `pnpm check` writes): that rule governs
+   modules which *declare* a component beside non-component exports, and a `.ts`
+   re-export barrel declares nothing.
+4. **Inside the feature, imports stay relative.** Never `@/features/order-book`
+   from within — a barrel self-import is precisely how this structure acquires an
+   import cycle.
+5. **The barrel is imported by directory.** `App` uses `@/features/order-book`,
+   no extension — the shape rule being that a directory exposing an `index.ts`
+   public API is imported as the directory. This change adds the repo's first
+   three *local* directory imports — `@/features/health` from `App.tsx` and
+   `App.test.tsx`, `@/features/order-book` from `App.tsx`; there was no
+   precedent. The eleven extensionless specifiers that already existed
+   (`@/lib/utils` and friends in vendored `src/components/ui/**`,
+   plus `RootErrorBoundary.tsx`) all resolve to **files**, so they are the
+   tolerated exception to the extension convention, not evidence for this rule.
+   Importing a file still carries its extension — by convention, not by
+   compulsion. Keep the two mechanisms straight: `allowImportingTsExtensions`
+   permits *writing* `.ts` in a specifier at all (TypeScript allows the flag only
+   under `noEmit`), while dropping an extension resolves because this repo sets
+   `moduleResolution: "bundler"`. Neither one ever required the extension.
+6. **Two segment names collide with app-level directories.** `lib/` vs
+   `src/lib/order-book/` — feature-local pure helpers vs the part-2 sync engine.
+   And `ui/` vs `src/components/ui/` — this feature's components vs the vendored
+   shadcn primitives they import, which appear in the same import block in
+   `ui/OrderBookLadder.tsx`. Both accepted; the concrete path pairs are called
+   out in the directory's own `CLAUDE.md`.
+
 ## Reuse recipe (for the next project)
 
 1. Bring parts 1+2 (transport + sync) per their own chronicles; this layer only needs
    the store contract (`subscribe`/`getState`, commit-stable snapshot) and a top-N
    selector.
-2. Copy `src/features/order-book/` + `src/test/fake-order-book-sync.ts`; vendor
+2. Copy `src/features/order-book/` + `src/test/fakeOrderBookSync.ts`; vendor
    `table badge skeleton card alert tooltip toggle-group` via the shadcn CLI (never
    import `@base-ui/react` directly — shadcn components or hand-built only).
 3. Add the `--bid`/`--ask` token families (base + `-foreground`/`-muted`/`-border`),

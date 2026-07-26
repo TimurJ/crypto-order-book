@@ -16,7 +16,7 @@ Two coordinated pieces, split along a hard coverage boundary (see below):
   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`,
   `Strict-Transport-Security`. Vite copies `public/_headers` → `dist/_headers` at build; wrangler
   deploys `dist/`.
-- **[`worker/no-store-response.ts`](../worker/no-store-response.ts)** — the shared builder every
+- **[`worker/noStoreResponse.ts`](../worker/noStoreResponse.ts)** — the shared builder every
   Worker-generated response goes through (`/config.js`, `/api/health`, the unmatched-`/api/*`
   404). It sets `X-Content-Type-Options: nosniff` (+ `cache-control: no-store`), because
   `_headers` provably cannot reach Worker-generated responses. The other headers are
@@ -41,7 +41,7 @@ Cloudflare's docs are explicit:
 `/config.js` is served by the Worker (it's in `run_worker_first` in `wrangler.jsonc`), so the `/*`
 rule in `_headers` does **not** attach to it. This is observable: `curl -I /config.js` shows the
 Worker-set `nosniff` but **no CSP**, while `curl -I /` shows the full set from `_headers`. Hence the
-split — and hence the regression test in `worker/config-response.test.ts` guarding the `/config.js`
+split — and hence the regression test in `worker/configResponse.test.ts` guarding the `/config.js`
 header.
 
 A Worker-only approach was rejected: assets that *do* match a static file are served directly and
@@ -55,23 +55,27 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
   Vite compiles its modulepreload polyfill *into* the bundle, not as an inline `<script>` — so a
   generic "Vite needs `'unsafe-inline'`" warning does **not** apply here. Keeping `script-src` clean
   is the single most important property: `'unsafe-inline'` there is full XSS.
-- **`style-src 'self' 'unsafe-inline'`.** The order-book UI injects runtime `<style>` *elements* — AG
-  Grid's JS theme, Base UI's `Select`/`ScrollArea` scrollbar-hiding, and the theme-provider's transient
-  anti-flash `<style>` (below) — so `style-src` allows `'unsafe-inline'`. This is a deliberate,
+- **`style-src 'self' 'unsafe-inline'`.** The app injects runtime `<style>` *elements* — Base UI's
+  `Select`/`ScrollArea` scrollbar-hiding and `ThemeProvider`'s transient anti-flash `<style>`
+  (below) — so `style-src` allows `'unsafe-inline'`. This is a deliberate,
   low-value directive to lock: `script-src 'self'` (untouched) is what actually stops XSS;
   CSS-injection exfiltration (`background:url(…)` attribute selectors) is closed by origin-locking
   `img-src`/`font-src`/`default-src` (all `'self'`/`data:` here), **not** by `style-src`; and Mozilla
   Observatory scores `style-src 'unsafe-inline'` a **0-point** penalty (vs **−20** for
   `script-src 'unsafe-inline'`). The stricter escape hatches were evaluated and rejected as
-  gold-plating for ~0 gain: `style-src-attr` is moot (AG Grid virtualization and Base UI positioning are
-  CSSOM property setters, not inline attributes — AG Grid's old `setAttribute('style', …)` was **fixed in
-  v33.1.1**, Feb 2025, and now uses `style.setProperty(…)`), and Base UI `CSPProvider disableStyleElements`
-  / AG Grid's deprecated legacy CSS theme / a Worker-minted `styleNonce` all add wiring, deprecation, or
-  infra cost for no real security.
+  gold-plating for ~0 gain: `style-src-attr` is moot (Base UI positioning uses CSSOM property setters,
+  not inline attributes), and Base UI `CSPProvider disableStyleElements` / a Worker-minted `styleNonce`
+  both add wiring or infra cost for no real security.
+  - **Amended after part 3 (the order-book UI).** This rationale originally cited **AG Grid**'s injected
+    JS theme first among three sources, and again in two of the escape-hatch clauses. AG Grid is **not
+    used for the ladder** — a ladder isn't a grid; it stays *reserved, not rejected* for a future blotter,
+    see [`order-book-ui-architecture.md`](order-book-ui-architecture.md) — so those clauses are gone. The
+    directive still stands on Base UI's injected elements plus the anti-flash swap; do **not** read the
+    absence of AG Grid as licence to tighten `style-src` (and a blotter would restore it).
   - **Theme-provider `<style>`.** The shadcn scaffold's `disableTransitionOnChange` (a
     next-themes-derived anti-flash) injects a transient `*{transition:none}` `<style>` during a theme
     swap so colors snap instead of animating, then removes it a frame later — see
-    [`theme-provider.tsx`](../src/components/theme-provider.tsx). `'unsafe-inline'` permits it.
+    [`ThemeProvider.tsx`](../src/components/ThemeProvider.tsx). `'unsafe-inline'` permits it.
   - **Gotcha — timing + coverage.** The `getComputedStyle` reflow + double-`rAF` removal timing in
     `disableTransitionsTemporarily()` must not be simplified — the mechanism and its acceptance test
     are owned by [`theming-architecture.md`](theming-architecture.md); what this doc owns is that
@@ -98,8 +102,8 @@ regardless, or route every asset through the Worker and lose direct-serve perfor
 ## ⚠️ Re-derive the CSP per project — do not copy this one
 
 `script-src 'self'` stays clean here (the directive that matters), but this project's `style-src`
-posture is **specific to its dependencies** — it allows `'unsafe-inline'` for the grid + popup `<style>`
-injection. Two lessons worth carrying:
+posture is **specific to its dependencies** — it allows `'unsafe-inline'` for the popup + anti-flash
+`<style>` injection. Two lessons worth carrying:
 
 - **Read the *current* source, not stale issues.** AG Grid's row/cell virtualization used to set
   `setAttribute('style', 'transform:…')` (CSP-blocked), but **v33.1.1 (Feb 2025) switched it to CSSOM
@@ -169,9 +173,9 @@ The pseudo-element case remains untestable — see the `style-src` gotcha above.
 3. For any route your Worker generates (here, `/config.js`, `/api/health`, and the
    unmatched-`/api/*` 404 under `run_worker_first`), set its headers
    **in the Worker** — `_headers` won't apply. At minimum `X-Content-Type-Options: nosniff`;
-   share one builder (`worker/no-store-response.ts`) so the routes can't drift.
-4. Add a test for the Worker-set headers (see `worker/config-response.test.ts` /
-   `worker/health-response.test.ts` / `worker/not-found-response.test.ts` + the test-wiring
+   share one builder (`worker/noStoreResponse.ts`) so the routes can't drift.
+4. Add a test for the Worker-set headers (see `worker/configResponse.test.ts` /
+   `worker/healthResponse.test.ts` / `worker/notFoundResponse.test.ts` + the test-wiring
    notes in [`docs/vitest-setup.md`](vitest-setup.md)).
 5. Verify with `wrangler dev` + `curl -I` as above; grade a deployed URL with the tools listed.
 

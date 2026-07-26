@@ -50,6 +50,8 @@ Two constraints shaped the migration:
 | Fast-Refresh rule | **`useComponentExportOnlyModules: "error"` (strict)** | Explicit choice — stricter than the old `react-refresh/only-export-components` |
 | VCS awareness | **`vcs.useIgnoreFile: true`** | Biome respects `.gitignore` |
 | Vendored code | **`overrides` → rule `off` for `src/components/ui/**`** | shadcn primitives co-locate `cva` with components by design; a scoped override survives `shadcn add` (preferred over per-line ignores) |
+| Feature boundary | **`noRestrictedImports`, group `**/features/*/**`, `error`** | A feature is imported as a directory; its `index.ts` is the public API (`.claude/rules/code-style.md`). Scoped to `features/` on purpose: features are swappable units where encapsulation is the point, whereas `src/lib/*` are shared engines callers are *meant* to reach into, and `src/components/ui/**` can't hold a barrel because `shadcn add` writes per-file specifiers. Needs no `overrides` — intra-feature imports are relative, so they never match |
+| Filenames | **`useFilenamingConvention`, `filenameCases: ["camelCase", "PascalCase"]`, `error`** | PascalCase components, camelCase everything else (`.claude/rules/code-style.md`). The cases must be pinned — Biome's default set includes `kebab-case`, so the default would have accepted the old names. Vendored `src/components/ui/**` is exempt in the same `overrides` entry, because `shadcn add` owns those filenames. Gotchas in §4.9 |
 
 The full `biome.json` is the source of truth; the table above is the *why*.
 
@@ -74,7 +76,7 @@ Everything below is commit `3272902`.
 - **`.vscode/settings.json`** — `editor.formatOnSave: true`, `codeActionsOnSave: { source.fixAll.biome:
   "explicit" }`, `[typescript]`/`[typescriptreact]` `defaultFormatter: biomejs.biome`, and
   `[css].formatOnSave: false` (CSS is off-limits to Biome). Committed via the `.gitignore` allowlist.
-- **`src/components/theme-context.ts`** — extracted from the provider (see §4.1).
+- **`src/components/themeContext.ts`** — extracted from the provider (see §4.1).
 
 **Modified**
 
@@ -84,7 +86,7 @@ Everything below is commit `3272902`.
 - **`.gitignore`** — added `!.vscode/settings.json` so the shared editor settings are committed.
 - **`index.html`** — `<title>` `vite-app` → `Crypto Order Book` (incidental cleanup in the same commit).
 - **`pnpm-lock.yaml`** — large shrink as the eslint/prettier dependency trees dropped out.
-- **Five code fixes** — `src/App.tsx`, `src/components/theme-provider.tsx`, `src/main.tsx`,
+- **Five code fixes** — `src/App.tsx`, `src/components/ThemeProvider.tsx`, `src/main.tsx`,
   `vite.config.ts` (see §4).
 
 ### 3.1 Prettier → Biome formatter mapping (byte-identical)
@@ -117,12 +119,12 @@ The valuable part. The migration's stricter linting surfaced real issues — **a
 
 ### 4.1 A dead `eslint-disable` was masking a real Fast-Refresh bug
 
-*Symptom:* `theme-provider.tsx` began with `/* eslint-disable react-refresh/only-export-components */`.
+*Symptom:* `ThemeProvider.tsx` began with `/* eslint-disable react-refresh/only-export-components */`.
 *Cause:* the file exported a component **and** non-components (`useTheme` hook, `ThemeProviderContext`,
 the `Theme`/`ThemeProviderState` types) — a genuine mixed-export issue that breaks React Fast Refresh.
 The blanket disable had been silencing it.
 *Fix:* split the context, the `useTheme` hook, and the `Theme` type into a new
-**`src/components/theme-context.ts`**; the provider now imports `{ ThemeProviderContext, type Theme }`
+**`src/components/themeContext.ts`**; the provider now imports `{ ThemeProviderContext, type Theme }`
 and exports **only** the `ThemeProvider` component. The disable comment is gone.
 *Lesson:* this is exactly why suppressions are avoided — they hide the problem instead of fixing it.
 
@@ -168,6 +170,50 @@ createRoot(rootElement).render(/* … */)
 *Fix:* scope Biome to `.ts`/`.tsx` only (§2). **Never** point its CSS formatter/linter at `index.css` —
 Vite + Tailwind own that file. (`.vscode/settings.json` also sets `[css].formatOnSave: false`.)
 
+### 4.8 `noRestrictedImports` matches the written specifier, not the resolved path
+
+*Not a migration finding* — a property of the later feature-boundary group (§2), recorded here because it
+surprises.
+*Behaviour:* `@/features/order-book` resolves to `src/features/order-book/index.ts`, a path that **does**
+match `**/features/*/**` — yet it lints clean, while `@/features/order-book/ui/OrderBook.tsx` errors.
+Biome compares the pattern against the specifier string as written, not the resolved path.
+*Consequences, both deliberate, neither fixed:* a barrel self-import from *inside* the feature passes too
+— same specifier, so the rule cannot see where it was written; and a relative cross-feature escape is not
+caught. Closing the escape needs `"../*/**"`, which does match both depths (`*` matches `..`, verified by
+probe: `../../health/healthQuery.ts` from `ui/` is flagged once that group is added) — but it also
+matches the 21 legitimate cross-segment imports inside `order-book` (`../lib/…`, `../model/…`), so the
+hole stays open. Zero instances of a cross-feature relative import exist today.
+
+### 4.9 `useFilenamingConvention` — and the case-insensitive-filesystem trap next to it
+
+*Not a migration finding* either — added when the tree moved off kebab-case filenames onto PascalCase
+components / camelCase modules.
+*Config:* `filenameCases: ["camelCase", "PascalCase"]`. The default set is
+`camelCase | kebab-case | snake_case | <matches an export name>`, which would keep accepting kebab, so the
+cases must be pinned explicitly. `["export"]` alone does **not** work: `orderBookFormat.ts` exports
+`formatDecimalString` and `groupThousands` and matches neither.
+*Exemption:* vendored `src/components/ui/**` joins `useComponentExportOnlyModules` in the one `overrides`
+entry. The rule applies to filenames, so a `biome-ignore` comment cannot suppress it — `overrides` is the
+mechanism Biome's own rule docs prescribe. Verify the carve-out is scoped rather than global by probing
+*both* sides: the same kebab filename must error under `src/` and pass under `src/components/ui/`.
+*The trap, which cost real rework:* the migration script resolved each rename target by testing whether the
+PascalCase candidate existed on disk, falling back to camelCase. **macOS filesystems are
+case-insensitive**, so `os.path.exists("useLevelFlashes.ts")` returns true for a probe of
+`UseLevelFlashes.ts` — every non-component module was silently retitled PascalCase across 102 doc mentions.
+Two lessons: classify by *what a file is* (does it export a component?), never by probing the filesystem
+for a name; and when the checker and the fixer share a regex, a clean verification result may only prove
+they share a blind spot. The first repair pass excluded any mention preceded by `/`, reported "0
+remaining", and had in fact missed 79 path-prefixed cases.
+*Sweep every tracked file, not just source and `docs/`.* A rename invalidates **prose**, and no compiler or
+linter reads prose — `tsc` resolves only import specifiers, this rule inspects only filenames. After the
+gates were green, 23 references to deleted filenames still sat in comments across 18 files, plus
+`.env.example`, which is neither source nor a doc and which no earlier pass had any reason to open. Drive
+the sweep off `git ls-files` and key it on the real on-disk basenames.
+*And pair every sweep with a control that must fail.* Three separate checks in this migration silently
+examined nothing and were indistinguishable from passing: a lookbehind excluding `/` (hid path-prefixed
+matches), a zsh glob failure that aborted the command before `grep` ran (hid `public/_headers`), and
+`grep --include='*.ts'` filtering out explicitly-named `.md` arguments (hid a token already seen by eye).
+
 ---
 
 ## 5. From-scratch setup recipe (do this on the next project)
@@ -182,7 +228,11 @@ Assumes a Vite + React + TS project currently on ESLint + Prettier.
    Prettier settings in `formatter` + `javascript.formatter` (use §3.1 as the map); set
    `linter.rules.preset: "recommended"` + `domains.react: "recommended"`; `assist.enabled: false`;
    `vcs.useIgnoreFile: true`; and an `overrides` entry turning `useComponentExportOnlyModules` `off` for
-   any vendored UI dir (e.g. `src/components/ui/**`).
+   any vendored UI dir (e.g. `src/components/ui/**`). If the project has feature folders behind barrels,
+   add `noRestrictedImports` with group `**/features/*/**` to enforce the boundary (§2, §4.8). To pin
+   filenames, add `useFilenamingConvention` with explicit `filenameCases` and turn it `off` in that same
+   vendored `overrides` entry (§2, §4.9) — do this **first**, before any files exist, so no migration is
+   needed later.
 3. **Swap `package.json` scripts:** `lint: "biome lint"`, `format: "biome format --write"`,
    `check: "biome check --write"`.
 4. **Remove the old tooling:** delete `eslint.config.js`, `.prettierrc`, `.prettierignore`, and uninstall

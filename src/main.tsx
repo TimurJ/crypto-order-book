@@ -5,10 +5,10 @@ import { createRoot, type RootOptions } from "react-dom/client"
 
 import "./index.css"
 import { App } from "./App.tsx"
-import { RootErrorBoundary } from "@/components/root-error-boundary.tsx"
-import { ThemeProvider } from "@/components/theme-provider.tsx"
-import { createQueryClient } from "@/lib/query/query-client.ts"
-import { reportError } from "@/lib/report-error.ts"
+import { RootErrorBoundary } from "@/components/RootErrorBoundary.tsx"
+import { ThemeProvider } from "@/components/ThemeProvider.tsx"
+import { createQueryClient } from "@/lib/query/queryClient.ts"
+import { reportError } from "@/lib/reportError.ts"
 
 const rootElement = document.getElementById("root")
 
