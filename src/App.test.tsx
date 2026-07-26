@@ -1,9 +1,6 @@
 import { screen } from "@testing-library/react"
 import { App } from "./App.tsx"
-import {
-  type AppHealth,
-  healthQueryOptions,
-} from "@/features/health/health-query.ts"
+import { type AppHealth, healthQueryOptions } from "@/features/health"
 import { createTestQueryClient } from "@/test/query-client.ts"
 import { renderWithClient } from "@/test/render-with-client.tsx"
 

@@ -1,10 +1,10 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type { OrderBookView, ViewLevel } from "../lib/order-book-view.ts"
+import { BTCUSDT_DISPLAY } from "../lib/symbol-display.ts"
+import type { LevelFlashes } from "../model/use-level-flashes.ts"
+import type { MidDirection } from "../model/use-mid-direction.ts"
 import { OrderBookLadder } from "./order-book-ladder.tsx"
-import type { OrderBookView, ViewLevel } from "./order-book-view.ts"
-import { BTCUSDT_DISPLAY } from "./symbol-display.ts"
-import type { LevelFlashes } from "./use-level-flashes.ts"
-import type { MidDirection } from "./use-mid-direction.ts"
 import type { BookViewFilter } from "./view-toggle.tsx"
 
 const noFlashes: LevelFlashes = {

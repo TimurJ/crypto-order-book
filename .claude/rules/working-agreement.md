@@ -39,6 +39,10 @@ How to work in this repo. These load every session — they are constraints, not
   architecture, decision tables, gotchas, and roadmaps into `docs/` and leave CLAUDE.md a short
   rationale plus a link — because CLAUDE.md loads every session, so length costs context and reduces
   adherence.
+- **`.claude/rules/*.md` is a fourth surface, split by kind rather than depth**: enforceable rules to
+  follow *while writing code* go here; CLAUDE.md describes what the repo *is*. A repo-wide convention
+  belongs here, not in a per-directory `CLAUDE.md`, which should carry only what is specific to that
+  directory. These load every session too, so the same length discipline applies.
 - **CLAUDE.md stays under 200 lines** — official guidance, because longer files consume more context and
   reduce adherence. Before finishing any edit to it, run `wc -l CLAUDE.md`; if it is at or over 200, push
   detail into the subsystem's `docs/` chronicle instead of shipping the growth. Check words too, not just

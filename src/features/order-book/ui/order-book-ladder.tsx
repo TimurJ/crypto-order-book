@@ -29,12 +29,12 @@ import {
 } from "@/components/ui/table.tsx"
 import { TooltipProvider } from "@/components/ui/tooltip.tsx"
 import { cn } from "@/lib/utils.ts"
+import type { OrderBookView } from "../lib/order-book-view.ts"
+import { formatPair, type SymbolDisplay } from "../lib/symbol-display.ts"
+import type { LevelFlashes } from "../model/use-level-flashes.ts"
+import type { MidDirection } from "../model/use-mid-direction.ts"
 import { DepthRow, SkeletonRow } from "./depth-row.tsx"
-import type { OrderBookView } from "./order-book-view.ts"
 import { SpreadRow } from "./spread-row.tsx"
-import { formatPair, type SymbolDisplay } from "./symbol-display.ts"
-import type { LevelFlashes } from "./use-level-flashes.ts"
-import type { MidDirection } from "./use-mid-direction.ts"
 import type { BookViewFilter } from "./view-toggle.tsx"
 
 const HEAD_CELL =

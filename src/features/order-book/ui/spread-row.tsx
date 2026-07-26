@@ -9,9 +9,9 @@
 // never-round-an-exchange-string rule guards the book's own price/qty strings, not our
 // computed midpoints (a half-tick mid can't round-trip through the string rules anyway).
 
-import { groupThousands } from "./order-book-format.ts"
-import type { MidDirection } from "./use-mid-direction.ts"
 import { cn } from "@/lib/utils.ts"
+import { groupThousands } from "../lib/order-book-format.ts"
+import type { MidDirection } from "../model/use-mid-direction.ts"
 
 interface SpreadRowProps {
   mid: number | null

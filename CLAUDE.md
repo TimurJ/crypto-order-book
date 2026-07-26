@@ -37,6 +37,8 @@ is the full detail behind the section here. Read it before changing a subsystem.
   `@theme` / `@custom-variant` / `@plugin`. `.editorconfig` covers CSS/JSON/MD/YAML instead.
 - `useComponentExportOnlyModules` stays **strict**; `src/components/ui/**` is exempted via `overrides`
   (vendored shadcn primitives co-locate `cva` variants by design).
+- `noRestrictedImports` gates the **feature barrel**: the pattern `**/features/*/**` makes a deep import
+  into `src/features/*` an error. Matched on the written specifier, not the resolved path.
 - **Fix lint findings in code — do not add `biome-ignore` / `eslint-disable`** unless unavoidable.
 
 ## Testing — Vitest
@@ -172,14 +174,9 @@ never in `vars` in `wrangler.jsonc`, which are public.
 
 ## Conventions / gotchas
 
-- Prefer **named exports** for components — avoid `export default` for components.
-- Imports use the **explicit file extension** (`import { App } from "./App.tsx"`), required by
-  `allowImportingTsExtensions`.
-- Outside `src/components/ui/**`, **do not co-locate non-component exports** (hooks, context, `cva`) with
-  a component; split them into their own module or `useComponentExportOnlyModules` flags it.
 - **Never put env-specific config in `VITE_*` vars or `public/`.** It would be baked into the bundle
   (breaking build-once) or, for `public/config.js`, shadow the Worker's `/config.js` route. The Worker's
-  `export default { fetch }` is exempt from the component-export rule — it isn't a component.
+  `export default { fetch }` is exempt from `useComponentExportOnlyModules` — it isn't a component.
 - **Worker types are generated, not a dependency.** `worker/worker-configuration.d.ts` comes from
   `pnpm cf-typegen` and is committed — never hand-edit it; the tracked copy must be regenerated after
   changing `compatibility_date` or bumping `wrangler`/`workerd` (CI's `cf-typegen:check` fails when stale).

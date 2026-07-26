@@ -50,6 +50,7 @@ Two constraints shaped the migration:
 | Fast-Refresh rule | **`useComponentExportOnlyModules: "error"` (strict)** | Explicit choice — stricter than the old `react-refresh/only-export-components` |
 | VCS awareness | **`vcs.useIgnoreFile: true`** | Biome respects `.gitignore` |
 | Vendored code | **`overrides` → rule `off` for `src/components/ui/**`** | shadcn primitives co-locate `cva` with components by design; a scoped override survives `shadcn add` (preferred over per-line ignores) |
+| Feature boundary | **`noRestrictedImports`, group `**/features/*/**`, `error`** | A feature is imported as a directory; its `index.ts` is the public API (`.claude/rules/code-style.md`). Scoped to `features/` on purpose: features are swappable units where encapsulation is the point, whereas `src/lib/*` are shared engines callers are *meant* to reach into, and `src/components/ui/**` can't hold a barrel because `shadcn add` writes per-file specifiers. Needs no `overrides` — intra-feature imports are relative, so they never match |
 
 The full `biome.json` is the source of truth; the table above is the *why*.
 
@@ -168,6 +169,20 @@ createRoot(rootElement).render(/* … */)
 *Fix:* scope Biome to `.ts`/`.tsx` only (§2). **Never** point its CSS formatter/linter at `index.css` —
 Vite + Tailwind own that file. (`.vscode/settings.json` also sets `[css].formatOnSave: false`.)
 
+### 4.8 `noRestrictedImports` matches the written specifier, not the resolved path
+
+*Not a migration finding* — a property of the later feature-boundary group (§2), recorded here because it
+surprises.
+*Behaviour:* `@/features/order-book` resolves to `src/features/order-book/index.ts`, a path that **does**
+match `**/features/*/**` — yet it lints clean, while `@/features/order-book/ui/order-book.tsx` errors.
+Biome compares the pattern against the specifier string as written, not the resolved path.
+*Consequences, both deliberate, neither fixed:* a barrel self-import from *inside* the feature passes too
+— same specifier, so the rule cannot see where it was written; and a relative cross-feature escape is not
+caught. Closing the escape needs `"../*/**"`, which does match both depths (`*` matches `..`, verified by
+probe: `../../health/health-query.ts` from `ui/` is flagged once that group is added) — but it also
+matches the 21 legitimate cross-segment imports inside `order-book` (`../lib/…`, `../model/…`), so the
+hole stays open. Zero instances of a cross-feature relative import exist today.
+
 ---
 
 ## 5. From-scratch setup recipe (do this on the next project)
@@ -182,7 +197,8 @@ Assumes a Vite + React + TS project currently on ESLint + Prettier.
    Prettier settings in `formatter` + `javascript.formatter` (use §3.1 as the map); set
    `linter.rules.preset: "recommended"` + `domains.react: "recommended"`; `assist.enabled: false`;
    `vcs.useIgnoreFile: true`; and an `overrides` entry turning `useComponentExportOnlyModules` `off` for
-   any vendored UI dir (e.g. `src/components/ui/**`).
+   any vendored UI dir (e.g. `src/components/ui/**`). If the project has feature folders behind barrels,
+   add `noRestrictedImports` with group `**/features/*/**` to enforce the boundary (§2, §4.8).
 3. **Swap `package.json` scripts:** `lint: "biome lint"`, `format: "biome format --write"`,
    `check: "biome check --write"`.
 4. **Remove the old tooling:** delete `eslint.config.js`, `.prettierrc`, `.prettierignore`, and uninstall
