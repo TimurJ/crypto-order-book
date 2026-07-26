@@ -94,8 +94,8 @@ Working rules for anyone using Claude Code in this repo live in [`.claude/rules/
 tracked topic files (git boundary, planning, code style, verification, GitHub workflow) that the tool
 loads automatically every session, alongside [`CLAUDE.md`](./CLAUDE.md). The split is by kind, not depth:
 the rule files carry the repo-wide rules you follow *while writing code* — the git boundary, planning and
-verification habits, GitHub workflow, and code style (comments, module and export shape, feature folders,
-UI primitives, SVG edits); `CLAUDE.md` describes what the repo *is*, its tooling and architecture
+verification habits, GitHub workflow, and code style (comments, filenames, module and export shape,
+feature folders, UI primitives, SVG edits); `CLAUDE.md` describes what the repo *is*, its tooling and architecture
 conventions and their gotchas. A per-directory `CLAUDE.md`
 (e.g. [`src/features/order-book/`](src/features/order-book)) carries only what is specific to that folder,
 and loads only when Claude works in it.
@@ -105,7 +105,7 @@ and loads only when Claude works in it.
 Tests run on **[Vitest](https://vitest.dev)** with **React Testing Library** in a jsdom environment.
 Config is in `vitest.config.ts` (it extends `vite.config.ts`); tests live beside the code they cover
 as `*.test.ts(x)`. Components that fetch via TanStack Query render through `renderWithClient`
-(`src/test/render-with-client.tsx`), which provides a fresh isolated query client per test.
+(`src/test/renderWithClient.tsx`), which provides a fresh isolated query client per test.
 
 ```bash
 pnpm test          # watch mode
@@ -264,7 +264,7 @@ re-promoting a known-good version is one command away
   provenance ([`scripts/verify-attestation.sh`](scripts/verify-attestation.sh)) before promoting, so
   every file it ships is provably from the build.
 - **Runtime config, not build-time** — env values are served by the Worker at `/config.js`
-  (`window.__APP_CONFIG__`), read via [`src/lib/app-config.ts`](src/lib/app-config.ts); **never**
+  (`window.__APP_CONFIG__`), read via [`src/lib/appConfig.ts`](src/lib/appConfig.ts); **never**
   put env config in `VITE_*` vars or `public/`.
 - **Per-environment deploy tokens** — each GitHub Environment holds its own revocable
   `CLOUDFLARE_API_TOKEN`, so the prod token is only exposed to the approval-gated prod job. Each
@@ -300,7 +300,7 @@ Cloudflare boundary:
 
 - [`public/_headers`](public/_headers) — applied by Static Assets to the document + bundled assets
   (Vite copies it to `dist/`). This is where the CSP and `frame-ancestors` actually matter.
-- [`worker/no-store-response.ts`](worker/no-store-response.ts) — the shared builder that sets
+- [`worker/noStoreResponse.ts`](worker/noStoreResponse.ts) — the shared builder that sets
   `nosniff` (+ `no-store`) on every Worker-generated response (`/config.js`, `/api/health`, the
   `/api` 404), because Cloudflare's `_headers` does **not** apply to Worker-generated responses.
 
@@ -363,6 +363,12 @@ This places UI components in `src/components/ui`. Import them via the `@` alias:
 ```tsx
 import { Button } from "@/components/ui/button"
 ```
+
+Those vendored files keep the CLI's own kebab-case names (`toggle-group.tsx`) — leave them alone, since
+`shadcn add` writes and overwrites by that filename, so renaming one makes the next `add` create a
+duplicate instead of updating yours. Code you write follows the repo convention instead: PascalCase for
+component files, camelCase for everything else, enforced by Biome's `useFilenamingConvention`, with
+`src/components/ui/**` exempted. See [`.claude/rules/code-style.md`](.claude/rules/code-style.md).
 
 ## License
 

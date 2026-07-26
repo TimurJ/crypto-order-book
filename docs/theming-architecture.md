@@ -24,8 +24,8 @@ scheme flip propagates immediately via a `matchMedia` change listener.
 
 | Piece | Where | What it does |
 |---|---|---|
-| `ThemeProvider` | `src/components/theme-provider.tsx` (only export) | Owns the preference state; applies the resolved theme to the root element; wires the keybind, cross-tab sync, and anti-flash |
-| `useTheme` / `ThemeProviderContext` / `Theme` | `src/components/theme-context.ts` | The consumption surface — `useTheme()` throws outside the provider |
+| `ThemeProvider` | `src/components/ThemeProvider.tsx` (only export) | Owns the preference state; applies the resolved theme to the root element; wires the keybind, cross-tab sync, and anti-flash |
+| `useTheme` / `ThemeProviderContext` / `Theme` | `src/components/themeContext.ts` | The consumption surface — `useTheme()` throws outside the provider |
 | Dark variant + tokens | `src/index.css` | `@custom-variant dark (&:is(.dark *))`; OKLch design tokens in `:root` (light) and `.dark` blocks, surfaced to Tailwind via `@theme inline` |
 | Mount point | `src/main.tsx` | `<ThemeProvider><App /></ThemeProvider>` |
 | Bootstrap `theme-color` | `index.html` | Media-based light/dark `<meta name="theme-color">` — tracks the **OS** scheme only (see [Roadmap](#roadmap)) |
@@ -59,7 +59,7 @@ Behaviors, all in the provider:
 |---|---|---|
 | Dark-mode strategy | **`.dark` class** + `@custom-variant dark (&:is(.dark *))`, not Tailwind's media-query default | A media strategy can't express "user chose light while the OS is dark" — a manual override plus a system option needs a class the app controls |
 | Preference vs. resolved | Store the **preference** (`dark`/`light`/`system`); resolve to `light`/`dark` only at apply time, never persist the resolved value | Persisting the resolved value would freeze `"system"` at whatever the OS was at save time |
-| Two-file split | Provider component in `theme-provider.tsx`; context + `useTheme` + `Theme` type in `theme-context.ts` | The strict Fast-Refresh rule (`useComponentExportOnlyModules`) forbids mixed exports — the split fixed a real Fast-Refresh bug that an old `eslint-disable` had been masking ([`biome-setup.md`](biome-setup.md#41-a-dead-eslint-disable-was-masking-a-real-fast-refresh-bug)) |
+| Two-file split | Provider component in `ThemeProvider.tsx`; context + `useTheme` + `Theme` type in `themeContext.ts` | The strict Fast-Refresh rule (`useComponentExportOnlyModules`) forbids mixed exports — the split fixed a real Fast-Refresh bug that an old `eslint-disable` had been masking ([`biome-setup.md`](biome-setup.md#41-a-dead-eslint-disable-was-masking-a-real-fast-refresh-bug)) |
 | Storage validation | `isTheme()` type-guard on every read (init and `storage` events) | `localStorage` is user-editable input; never trust it into a union type |
 | Keybind semantics | Pressing `d` always lands on an **explicit** light/dark — from `"system"`, the opposite of the current OS theme | A toggle must visibly change the theme every press; staying in `"system"` couldn't guarantee that |
 | Anti-flash timing | `getComputedStyle` reflow + **double** `rAF` before removing the `<style>` | The minimum that reliably outlives the swap's paint — gotcha + acceptance test under [What's implemented today](#whats-implemented-today) |
@@ -74,7 +74,7 @@ component test rendering under `ThemeProvider` would crash without the stub in
 
 ## Reuse recipe (for the next project)
 
-1. Copy `src/components/theme-provider.tsx` + `src/components/theme-context.ts` (keep the two-file
+1. Copy `src/components/ThemeProvider.tsx` + `src/components/themeContext.ts` (keep the two-file
    split — the Fast-Refresh rule will flag a merge).
 2. Mount `<ThemeProvider>` around the app in `main.tsx`.
 3. In the Tailwind entry CSS: `@custom-variant dark (&:is(.dark *))`, a `:root` block (light

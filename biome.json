@@ -32,6 +32,12 @@
       "preset": "recommended",
       "style": {
         "useComponentExportOnlyModules": "error",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "filenameCases": ["camelCase", "PascalCase"]
+          }
+        },
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -55,7 +61,8 @@
       "linter": {
         "rules": {
           "style": {
-            "useComponentExportOnlyModules": "off"
+            "useComponentExportOnlyModules": "off",
+            "useFilenamingConvention": "off"
           }
         }
       }
