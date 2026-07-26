@@ -92,9 +92,13 @@ For the full migration history, the decisions, and the gotchas, see [`docs/biome
 
 Working rules for anyone using Claude Code in this repo live in [`.claude/rules/`](.claude/rules) —
 tracked topic files (git boundary, planning, code style, verification, GitHub workflow) that the tool
-loads automatically every session, alongside [`CLAUDE.md`](./CLAUDE.md). Feature-level conventions live in
-a per-directory `CLAUDE.md` (e.g. [`src/features/order-book/`](src/features/order-book)), which loads only
-when Claude works in that folder.
+loads automatically every session, alongside [`CLAUDE.md`](./CLAUDE.md). The split is by kind, not depth:
+the rule files carry the repo-wide rules you follow *while writing code* — the git boundary, planning and
+verification habits, GitHub workflow, and code style (comments, module and export shape, feature folders,
+UI primitives, SVG edits); `CLAUDE.md` describes what the repo *is*, its tooling and architecture
+conventions and their gotchas. A per-directory `CLAUDE.md`
+(e.g. [`src/features/order-book/`](src/features/order-book)) carries only what is specific to that folder,
+and loads only when Claude works in it.
 
 ## Testing
 

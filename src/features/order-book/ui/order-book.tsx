@@ -28,19 +28,19 @@ import { Card } from "@/components/ui/card.tsx"
 import { getConfig } from "@/lib/app-config.ts"
 import type { createOrderBookSync } from "@/lib/order-book/order-book-sync.ts"
 import { cn } from "@/lib/utils.ts"
-import { ImbalanceBar } from "./imbalance-bar.tsx"
-import { LiveIndicator } from "./live-indicator.tsx"
-import { OrderBookLadder } from "./order-book-ladder.tsx"
-import { selectOrderBookView } from "./order-book-view.ts"
+import { selectOrderBookView } from "../lib/order-book-view.ts"
 import {
   BTCUSDT_DISPLAY,
   formatPair,
   type SymbolDisplay,
-} from "./symbol-display.ts"
-import { useLevelFlashes } from "./use-level-flashes.ts"
-import { useMidDirection } from "./use-mid-direction.ts"
-import { useOrderBookSync } from "./use-order-book-sync.ts"
-import { useStatusAnnouncement } from "./use-status-announcement.ts"
+} from "../lib/symbol-display.ts"
+import { useLevelFlashes } from "../model/use-level-flashes.ts"
+import { useMidDirection } from "../model/use-mid-direction.ts"
+import { useOrderBookSync } from "../model/use-order-book-sync.ts"
+import { useStatusAnnouncement } from "../model/use-status-announcement.ts"
+import { ImbalanceBar } from "./imbalance-bar.tsx"
+import { LiveIndicator } from "./live-indicator.tsx"
+import { OrderBookLadder } from "./order-book-ladder.tsx"
 import { type BookViewFilter, ViewToggle } from "./view-toggle.tsx"
 
 const LEVEL_COUNT = 20

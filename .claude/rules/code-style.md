@@ -17,6 +17,41 @@
   - Failure modes: a bare `//` above an exported symbol throws away the free hover hint; JSDoc floating
     mid-body attaches to nothing.
 
+## Feature folders
+
+- **Every feature exposes exactly one `index.ts`, from its first file** — consumers import the feature
+  as a directory (`@/features/health`) and never reach past it. From day one, because a barrel added
+  later is itself the cross-repo edit the barrel exists to prevent. Biome enforces the *outside* half:
+  `noRestrictedImports` bans the specifier pattern `**/features/*/**`, so `@/features/order-book` is
+  fine and `@/features/order-book/ui/order-book.tsx` is an error. The *inside* half is on you — files
+  import each other relatively, and a barrel self-import lints clean (it is the same specifier), which
+  is how the cycle starts.
+- A feature starts **flat** and splits into segments once the flat listing stops sorting itself at a
+  glance — a handful of files across two kinds still does; twenty-plus across three does not.
+  `src/features/health/` (4 files) is correctly flat; `src/features/order-book/` reached 22 (14 source
+  + 8 co-located tests) across three kinds and was split.
+- Once a feature is split, where a file goes, in order: **defines server state or wraps a network client
+  and touches no React runtime → `api/`** (`queryOptions` modules, transport adapters); else **renders
+  JSX → `ui/`**; else **touches the React runtime** (hooks, context, refs) **→ `model/`**; else **→
+  `lib/`**. While a feature is flat these live at its root, as `src/features/health/health-query.ts`
+  does. The order matters in two places: `ui/` before `model/`, because containers call hooks too
+  (`ui/order-book.tsx` uses `useId`/`useMemo`/`useState`); and `api/` before `lib/`, because a
+  `queryOptions` module is pure and would otherwise fall through to the `else`. The no-React-runtime
+  clause is what keeps a React seam over a transport (`model/use-order-book-sync.ts`) out of `api/`.
+- A feature's `lib/` holds *that feature's* pure helpers, not `src/lib/`, which holds app-wide engines.
+- Worked example and rationale: the *Restructure* section of
+  [`docs/order-book-ui-architecture.md`](../../docs/order-book-ui-architecture.md).
+
+## Modules & exports
+
+- Prefer **named exports** for components — avoid `export default` for components.
+- Importing a **file** uses its explicit extension (`"./App.tsx"`) — except the shadcn-written
+  specifiers in vendored `src/components/ui/**`, and the one `@/components/ui/button` import in
+  `src/components/root-error-boundary.tsx`. A **directory exposing an `index.ts` is imported as the
+  directory** (`@/features/health`).
+- Outside `src/components/ui/**`, **do not co-locate non-component exports** (hooks, context, `cva`) with
+  a component; split them into their own module or `useComponentExportOnlyModules` flags it.
+
 ## UI primitives
 
 - Never import `@base-ui/react` directly in app or feature code — because Base UI exists here only as the

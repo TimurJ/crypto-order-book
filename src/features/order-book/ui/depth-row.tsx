@@ -17,18 +17,21 @@
 // prototype's `overflow: visible` hack is deliberately not ported. Rows are
 // deliberately non-interactive otherwise (row selection was dropped by user decision).
 
+import { Skeleton } from "@/components/ui/skeleton.tsx"
+import { TableCell, TableRow } from "@/components/ui/table.tsx"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip.tsx"
-import { Skeleton } from "@/components/ui/skeleton.tsx"
-import { TableCell, TableRow } from "@/components/ui/table.tsx"
 import { cn } from "@/lib/utils.ts"
-import { formatDecimalString, groupThousands } from "./order-book-format.ts"
-import type { ViewLevel } from "./order-book-view.ts"
-import type { SymbolDisplay } from "./symbol-display.ts"
-import { type FlashDirection, useRowFlash } from "./use-level-flashes.ts"
+import {
+  formatDecimalString,
+  groupThousands,
+} from "../lib/order-book-format.ts"
+import type { ViewLevel } from "../lib/order-book-view.ts"
+import type { SymbolDisplay } from "../lib/symbol-display.ts"
+import { type FlashDirection, useRowFlash } from "../model/use-level-flashes.ts"
 
 const CELL = "h-[22px] px-2.5 py-0"
 

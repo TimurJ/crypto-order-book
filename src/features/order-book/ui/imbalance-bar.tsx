@@ -3,7 +3,7 @@
 // cross-side bar scaling encoded the same information implicitly. Renders nothing while
 // the window has no volume (imbalance null).
 
-import type { OrderBookView } from "./order-book-view.ts"
+import type { OrderBookView } from "../lib/order-book-view.ts"
 
 export function ImbalanceBar({
   imbalance,

@@ -31,7 +31,18 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "useComponentExportOnlyModules": "error"
+        "useComponentExportOnlyModules": "error",
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["**/features/*/**"],
+                "message": "Import the feature as a directory — its index.ts is the public API (.claude/rules/code-style.md)."
+              }
+            ]
+          }
+        }
       }
     },
     "domains": {

@@ -156,7 +156,8 @@ in one component run **sequentially** (first suspends before the second executes
 The query key is a cache entry's **identity by value** — dedup, staleness, and invalidation
 all key off it, and a typo silently creates a second entry rather than erroring. So: **no
 inline `queryKey`/`queryFn` in components, ever.** Each resource gets one module in its
-feature directory (`src/features/<feature>/<resource>-query.ts`) exporting a
+feature directory (`src/features/<feature>/[api/]<resource>-query.ts` — the `api/`
+segment once the feature is split, per `.claude/rules/code-style.md`) exporting a
 `<resource>QueryOptions()` function — key, queryFn (with `signal` forwarding), and
 per-resource tuning in one typed unit. `queryOptions()` (the v5 identity helper) links the
 key to the data type, so `useQuery(fooQueryOptions())`, `prefetchQuery`, and
