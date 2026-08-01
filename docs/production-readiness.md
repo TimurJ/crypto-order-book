@@ -102,6 +102,12 @@ script is the same-origin `/config.js`.
       **verify it before every promote** (`scripts/verify-attestation.sh`) — an unattested artifact
       never ships. Mechanism + invariants: [`cd-setup.md` §3.1](cd-setup.md#31-the-cd-workflow-cdyml)
 
+**Known limit / possible follow-up:** "Confirm live" proves post-promote health, not *which*
+version serves — a silently failed promote behind a healthy predecessor is invisible (the endpoints
+carry no version identity). Fix shape (stamp the deployed SHA via `versions upload --var`, surface
+it in `/api/health`, grep the exact SHA):
+[`cd-setup.md` §4 gotcha 10](cd-setup.md#4-gotchas-hit--how-they-were-fixed).
+
 **Why:** CD deploys three envs; without the gates, a broken or unattested build reaches live
 traffic before anyone looks — PROD especially.
 
