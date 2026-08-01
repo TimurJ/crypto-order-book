@@ -21,7 +21,7 @@ is the full detail behind the section here. Read it before changing a subsystem.
 |---|---|
 | `pnpm dev` / `pnpm preview` | Vite dev server / serve the production build |
 | `pnpm build` | `tsc -b && vite build` — type-check via project refs, then bundle |
-| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm typecheck` | `tsc -b` — all project refs, no bundle |
 | `pnpm test` / `test:run` / `test:ui` / `test:coverage` | vitest: watch / one-shot (CI + pre-push) / UI / v8 coverage |
 | `pnpm check` | `biome check --write` — lint + format, safe fixes (`lint` / `format` do one half each) |
 | `pnpm release <patch\|minor\|major> [rc]` | Compute the next tag off the latest release, preflight, tag + push (drives CD). `rc` → UAT candidate; `--dry-run`/`--yes` supported |

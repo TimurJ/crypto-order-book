@@ -70,7 +70,7 @@ Then open the URL Vite prints (default http://localhost:5173).
 | `pnpm test:run` | Run tests once (`vitest run`) — used by CI + pre-push |
 | `pnpm test:ui` | Open the Vitest UI dashboard (`vitest --ui`) |
 | `pnpm test:coverage` | Run tests with a coverage report (`vitest run --coverage`) |
-| `pnpm typecheck` | Type-check without emitting (`tsc --noEmit`) |
+| `pnpm typecheck` | Type-check all project refs (`tsc -b`), no bundling |
 | `pnpm lint` | Lint with Biome |
 | `pnpm format` | Format with Biome (`--write`) |
 | `pnpm check` | Lint + format and apply safe fixes (`biome check --write`) |
