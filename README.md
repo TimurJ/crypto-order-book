@@ -59,6 +59,12 @@ Then open the URL Vite prints (default http://localhost:5173).
 > version. The Node version is **enforced** at `pnpm install`, not just advised — see
 > [Continuous integration](#continuous-integration) for how.
 
+> **Known dev-only issue:** a dev-server tab left open for hours grows its Chrome renderer to
+> gigabytes — React 19.2's dev-only performance instrumentation fills the User Timing buffer at this
+> app's commit rate, invisibly to the JS heap. Hard-refresh (and occasionally close) long-lived dev
+> tabs; production builds are unaffected. Full diagnosis and the upgrade-time verification checklist:
+> [`docs/react-dev-memory-leak.md`](docs/react-dev-memory-leak.md).
+
 ## Scripts
 
 | Command | Description |

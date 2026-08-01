@@ -260,8 +260,13 @@ way: `pnpm/action-setup` provisions pnpm from the same `packageManager` field an
 - **Where to look** when a dependency isn't updating: Insights → Dependency graph → Dependabot (last
   checked / errors). A parse or auth error appears *only* there.
 - **Majors** arrive as individual PRs — review the changelog, let CI run, merge one at a time.
-- **`shadcn` is a devDependency, deliberately** (moved 2026-07-26). It's a dev-time CLI — never imported
-  or bundled — but while it sat in `dependencies`, GitHub scoped its whole transitive subtree
+- **`shadcn` is a devDependency, deliberately** (moved 2026-07-26). Its CLI runs via
+  `pnpm dlx shadcn@latest`, and the installed package *is* consumed — at build time only:
+  `src/index.css` does `@import "shadcn/tailwind.css"`, and that file is load-bearing — it defines the
+  `data-open:`/`data-closed:`/`data-vertical:` custom variants the vendored `tooltip.tsx` and
+  `toggle-group.tsx` compile against. That consumption is build-time-only (Tailwind inlines the
+  compiled CSS; nothing of the package ships or runs at runtime), so dev scope remains correct.
+  The placement matters because while it sat in `dependencies`, GitHub scoped its whole transitive subtree
   (`@modelcontextprotocol/sdk` → `@hono/node-server`) as *runtime*, and GHSA-frvp-7c67-39w9
   (`@hono/node-server` < 2.0.5, moderate; the patch is a major no upstream has adopted) blocked the
   production-group PR at CI's dependency-review (`fail-on-severity: moderate`, default

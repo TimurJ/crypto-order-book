@@ -62,3 +62,6 @@ decision log: [`docs/order-book-ui-architecture.md`](../../../docs/order-book-ui
 
 - The ladder is **manual by decision** — AG Grid was evaluated and reserved for a future blotter, because a
   ladder is not a grid. Do not reach for a grid library here.
+- **Long-lived dev tabs leak renderer memory to gigabytes** — React 19.2 dev-only performance tracks ×
+  this app's ~10 commits/sec; known upstream, invisible to the JS heap, prod unaffected. Hard-refresh;
+  do not re-diagnose: [`docs/react-dev-memory-leak.md`](../../../docs/react-dev-memory-leak.md).

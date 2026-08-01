@@ -173,6 +173,11 @@ CI/security posture cleanly.
 - [x] Add a PR template (`.github/PULL_REQUEST_TEMPLATE.md` — light checklist) + `CODEOWNERS`
       (`* @TimurJ`). **Follow-up (user/GitHub):** CODEOWNERS is inert until branch protection's
       *"Require review from Code Owners"* is enabled
+- [ ] **Known dev-only issue (waiting on upstream):** React 19.2 dev builds leak the User Timing
+      buffer at this app's commit rate — multi-GB renderers in long-lived `pnpm dev` tabs, prod
+      unaffected. Diagnosis + on-upgrade verification checklist:
+      [`react-dev-memory-leak.md`](react-dev-memory-leak.md). Closes via the react-dom upgrade path
+      (expected ≥ 19.3, verify empirically)
 
 ### 10. Runtime & package-manager version lock ✅ DONE
 - [x] Enforce the Node major, not just advise it: `engines.node: ">=24 <25"` in `package.json` +
