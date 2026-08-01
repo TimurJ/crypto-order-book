@@ -172,7 +172,7 @@ never in `vars` in `wrangler.jsonc`, which are public.
   `vars` carry the **same** Binance hosts. [`docs/security-headers-setup.md`](docs/security-headers-setup.md)
 - **TypeScript:** `strict`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `erasableSyntaxOnly`,
   `noUnusedLocals`/`noUnusedParameters`; target es2023, `moduleResolution: "bundler"`. `tsc -b` builds
-  four project references — app, node (no `strict`), worker (`types: []`, no DOM lib) and test.
+  four project references — app, node, worker (`types: []`, no DOM lib) and test.
 
 ## Conventions / gotchas
 
