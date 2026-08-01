@@ -1,8 +1,9 @@
 {
   // Wrangler config for the crypto-order-book SPA on Cloudflare Workers (Static Assets).
-  // Three named environments => three isolated Worker scripts. ALWAYS deploy with `--env <name>`
-  // (the package.json deploy:* scripts and CD workflow do); a bare `wrangler deploy` would target
-  // the top-level config, which we never intend to ship.
+  // Three named environments => three isolated Worker scripts. ALWAYS pass `--env <name>` to every
+  // wrangler invocation — the package.json deploy:* scripts do (`wrangler deploy`), and so does CD
+  // (`wrangler versions upload` + `versions deploy`); a bare invocation would target the top-level
+  // config, which we never intend to ship.
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "crypto-order-book",
