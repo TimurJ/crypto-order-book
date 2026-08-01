@@ -75,6 +75,7 @@ Then open the URL Vite prints (default http://localhost:5173).
 | `pnpm format` | Format with Biome (`--write`) |
 | `pnpm check` | Lint + format and apply safe fixes (`biome check --write`) |
 | `pnpm release <patch\|minor\|major> [rc]` | Compute + push the next release tag off the latest release (add `rc` for a UAT candidate; `--dry-run` to preview). Drives the CD deploy. |
+| `pnpm sweep` | Classify local branches by PR state and delete provably-merged ones after a confirm (`--dry-run` to report only) — [docs/branch-sweep-setup.md](docs/branch-sweep-setup.md) |
 | `pnpm deploy:dev` / `:uat` / `:prod` | Deploy to a Cloudflare Workers environment (`wrangler deploy --env <name>`) |
 | `pnpm cf-typegen` | Regenerate the committed `worker/worker-configuration.d.ts` (runtime types from `wrangler.jsonc`'s `compatibility_date`) |
 | `pnpm cf-typegen:check` | Fail if that generated file is stale vs `wrangler.jsonc` (used by CI) |

@@ -25,6 +25,7 @@ is the full detail behind the section here. Read it before changing a subsystem.
 | `pnpm test` / `test:run` / `test:ui` / `test:coverage` | vitest: watch / one-shot (CI + pre-push) / UI / v8 coverage |
 | `pnpm check` | `biome check --write` — lint + format, safe fixes (`lint` / `format` do one half each) |
 | `pnpm release <patch\|minor\|major> [rc]` | Compute the next tag off the latest release, preflight, tag + push (drives CD). `rc` → UAT candidate; `--dry-run`/`--yes` supported |
+| `pnpm sweep` | Classify local branches by PR state; delete provably-merged ones after confirm |
 | `pnpm deploy:dev` / `:uat` / `:prod` | `wrangler deploy --env <name>` |
 | `pnpm cf-typegen` / `:check` | Regenerate / staleness-check the committed Worker types (`:check` is a CI gate) |
 
