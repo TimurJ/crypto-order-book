@@ -156,6 +156,22 @@ Two corollaries:
 - **Expect a quiet first run.** Cooldown skips any dependency whose latest version published inside the
   7-day window, so the first pass may open fewer PRs than the dependency count suggests. Not a bug.
 
+**Transitive dependencies sit *outside* this cooldown — deliberately covered elsewhere.** Dependabot's
+cooldown governs only the packages a PR directly targets; when it regenerates `pnpm-lock.yaml`,
+transitives re-resolve freely to the newest version satisfying their ranges. Observed in practice:
+PR #52 (2026-08-01) bumped eight direct deps, all 11–16 days old, and `enhanced-resolve`
+5.21.6 → 5.24.5 rode along as a transitive of `@tailwindcss/node` **two days** after publication.
+That gap is covered by **pnpm 11's default `minimumReleaseAge` (1440 minutes = 1 day)**, which applies
+at resolution time to *every* package, transitives included — so nothing under a day old can enter the
+lockfile, and pnpm's rationale (malicious releases are typically yanked within hours) means day one
+captures most of the protection. Raising it to a universal 7 days (`minimumReleaseAge: 10080` in
+`pnpm-workspace.yaml`) was **considered and rejected** (2026-08): unlike Dependabot's cooldown it has
+**no security exemption**, so a fresh patch for a disclosed CVE would itself be blocked for 7 days —
+the cure delayed as long as the defence. The residual risk is accepted because the floor doesn't stand
+alone: transitives are pinned in the lockfile and only move inside reviewed Dependabot PRs, install
+scripts are blocked by the `allowBuilds` allowlist, and CI's `dependency-review` job rejects any PR
+introducing a version with a known advisory.
+
 **The `packageManager` pnpm pin is *outside* this cooldown.** Dependabot doesn't update the
 `packageManager` field at all ([dependabot-core#4830](https://github.com/dependabot/dependabot-core/issues/4830)),
 so the pnpm version is bumped by hand. Apply the **same 7-day cooldown manually**: pin only a pnpm
