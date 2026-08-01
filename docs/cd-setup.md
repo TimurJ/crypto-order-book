@@ -238,6 +238,29 @@ The brittle part. Each is symptom → cause → fix.
      trips on a first run, enable Preview URLs for that Worker (dashboard / `"preview_urls": true`) or
      add `--preview-alias`.
 
+10. **"Confirm live" raced promote propagation** (`v1.0.0-rc.1`): the UAT deploy failed its last step
+    with `/api/health not ok` <1s after `versions deploy` returned, yet the env was healthy moments
+    later. The transient was **not** the old version still serving — the pre-promote `v0.1.2-rc.1`
+    was itself healthy and would have passed every grep. The giveaway signature in the log: the
+    response *passed* the nosniff grep but *failed* the `"status":"ok"` body grep at a sub-400
+    status — i.e. a 200 `index.html` from the SPA asset fallback (which carries `_headers`' nosniff),
+    meaning one request transiently fell through to assets instead of `run_worker_first`. And it was
+    per-request: the `/config.js` check a fraction earlier was Worker-routed and correct. curl's
+    `--retry --retry-all-errors` can't catch this (the fallback answers 200; only body assertions
+    see it), so `smoke.sh` now retries the **whole assertion set** with a bounded deadline
+    (`SMOKE_ATTEMPTS` × `SMOKE_RETRY_DELAY`, default 6 × 5s — a real regression still fails, just at
+    the deadline) and dumps the last response's headers + body on final failure, the forensic record
+    this incident lacked. Inherent limit, unchanged by the fix: when the previous version was also
+    healthy, "Confirm live" proves the env is healthy post-promote, not *which* version serves —
+    version identity isn't observable from these endpoints. `versions deploy` exiting 0 doesn't
+    close that gap either: it proves the control plane *accepted* the promote, not that the edge
+    serves it. The known fortification, if this gate ever needs to close: make identity observable —
+    stamp the commit SHA at stage time (`versions upload --var GIT_SHA:$GITHUB_SHA`; CLI vars
+    overlay the config `vars` without touching them, and a deploy-time var keeps build-once intact —
+    nothing is baked into `dist-<sha>`), surface it in `/api/health`, and have both smokes grep the
+    exact SHA instead of version-constant markers. Not implemented — tracked in
+    [`production-readiness.md` §5](production-readiness.md).
+
 ---
 
 ## 5. Manual setup (Part B) — exact steps
