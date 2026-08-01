@@ -11,6 +11,10 @@ How to work in this repo. These load every session — they are constraints, not
 
 ## Planning
 
+- **Plan first, for every change** — repo files, tooling, or the machine. Enter plan mode unless the
+  user explicitly says to start changing things; a question about a change asks for an answer, not
+  permission to make it — because the user reviews every change before execution, and edits made in
+  reply to a question have already had to be reverted and redone through an approved plan.
 - "Make a plan" means **enter plan mode**: research, then present findings for approval via
   ExitPlanMode — because the user reviews plans before execution. Writing a plan file and starting to
   implement is not planning. Keep edits to the plan file until approved.
