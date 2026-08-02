@@ -1,8 +1,5 @@
-// Segmented All / Bids / Asks control (design handoff). Single-select on the vendored
-// shadcn toggle-group; Base UI models single-select as a one-element value array, and an
-// empty array means "the pressed item was clicked again" — we swallow that so exactly
-// one view is always active (the design has no unfiltered-off state). The side items
-// take the design's buy/sell tones when pressed (solid --bid/--ask fill).
+// Base UI models single-select as a one-element array; an empty array means the pressed item
+// was re-clicked — swallowed, so exactly one view is always active.
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group.tsx"
 

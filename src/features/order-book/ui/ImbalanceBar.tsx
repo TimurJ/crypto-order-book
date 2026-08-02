@@ -1,7 +1,4 @@
-// Bottom strip: buy/sell share of the visible window's volume (design handoff). This is
-// the explicit home of the imbalance signal now that depth bars scale per-side — the old
-// cross-side bar scaling encoded the same information implicitly. Renders nothing while
-// the window has no volume (imbalance null).
+// The explicit home of the imbalance signal since depth bars scale per-side (../CLAUDE.md).
 
 import type { OrderBookView } from "../lib/orderBookView.ts"
 

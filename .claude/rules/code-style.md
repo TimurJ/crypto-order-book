@@ -2,13 +2,20 @@
 
 ## Comments
 
-- Write **new** code with zero comments — no header blocks, no rationale notes, no inline explanations —
-  unless comments are explicitly requested. Put design rationale in the conversation, the plan file, or
-  `docs/`.
-- **Never strip pre-existing comments** from files the user authored unless told to. Large parts of this
-  repo are deliberately commented — `src/lib/order-book/orderBookSync.ts`, `worker/index.ts`,
-  `src/main.tsx` — and that prose is intentional, not clutter.
-- When comments *are* requested, the split is by **audience**, not preference:
+- **Code stays light: at most a one-line landmine comment at the load-bearing spot** — the constraint
+  the code itself can't show ("group AFTER truncating", "never carries aria-live"). No header blocks, no
+  rationale essays, no inline narration; new code defaults to zero comments.
+- **Rationale lives in the section's CLAUDE.md; history lives in `docs/`.** Every section that
+  accumulates design rationale — a feature dir, a `src/lib/<subsystem>/`, `worker/` — gets its own
+  CLAUDE.md holding the cross-file rules and per-file rationale; the subsystem's `docs/` chronicle keeps
+  the full decision log. Worked example: `src/features/order-book/CLAUDE.md` +
+  [`docs/order-book-ui-architecture.md`](../../docs/order-book-ui-architecture.md).
+- **Pre-convention prose migrates deliberately, never incidentally** — notably `src/lib/order-book/`,
+  `src/lib/query/`, `src/lib/connection/`, `worker/`, `src/main.tsx`. Leave it untouched during
+  unrelated edits; migrating a section is its own change: relocate the prose into a new section
+  CLAUDE.md (and chronicle), keeping the one-line landmines — the order-book UI relocation is the
+  template.
+- The comments that do remain split by **audience**, not preference:
   - **JSDoc (`/** */`) only on named things used elsewhere** — functions, types, exported consts, public
     methods. It binds to the symbol below it and drives editor hover at call sites, so it documents the
     *contract*.

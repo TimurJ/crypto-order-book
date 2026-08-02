@@ -1,8 +1,4 @@
-// The panel header's connection dot (design handoff: 6px dot + tiny label). This is the
-// design's Live/Paused indicator remapped onto the engine's real statuses — "paused"
-// doesn't exist against live market data. Visual-only by design: availability is spoken
-// by the polite live region and problems by the assertive Alert (see OrderBook.tsx),
-// so this widget never carries aria-live itself.
+// Visual-only connection dot — never carries aria-live (two-tier policy in ../CLAUDE.md).
 
 import type { OrderBookStatus } from "@/lib/order-book/orderBookSync.ts"
 import { cn } from "@/lib/utils.ts"

@@ -1,13 +1,5 @@
-// The center strip between asks and bids (design handoff: big mid price with a ▲/▼
-// direction arrow, spread + spread% on the right). Mid is DERIVED from the book —
-// (bestBid + bestAsk) / 2 — because the sync layer streams depth only; there is no
-// trade stream, so there is no "last price" (user decision). Direction comes from
-// useMidDirection in the container; pre-first-move (null) renders the mid neutral with
-// no arrow, and a null mid (empty or crossed book) renders an em dash.
-//
-// Mid/spread/spreadPct are all derived floats, so toFixed is honest here — the
-// never-round-an-exchange-string rule guards the book's own price/qty strings, not our
-// computed midpoints (a half-tick mid can't round-trip through the string rules anyway).
+// Center strip. Mid is DERIVED — depth stream only, so there is no "last price" (user decision).
+// Mid/spread/spreadPct are derived floats, so toFixed is honest here.
 
 import { cn } from "@/lib/utils.ts"
 import { groupThousands } from "../lib/orderBookFormat.ts"
