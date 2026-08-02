@@ -1,15 +1,4 @@
-// React seam for the part-2 sync engine: owns one engine's lifecycle and exposes its
-// snapshot via useSyncExternalStore (the engine's snapshot is rebuilt on every commit
-// and referentially stable between commits — exactly the getSnapshot contract).
-//
-// The engine is created INSIDE the effect because instances are single-use (destroy()
-// is terminal). Under StrictMode's dev double-mount this runs create №1 → destroy №1 →
-// create №2, so dev logs show one extra connect/abort pair per page load — expected,
-// not a bug. A dependency change (e.g. a future symbol switcher) is the same path:
-// destroy-and-recreate, the engine's documented restart contract.
-//
-// createSync is a dependency-injection seam for tests (src/test/fakeOrderBookSync.ts);
-// production code never passes it.
+// React seam for the sync engine, created INSIDE the effect — instances are single-use (../CLAUDE.md).
 
 import { useEffect, useState, useSyncExternalStore } from "react"
 import {
@@ -27,9 +16,7 @@ export interface UseOrderBookSyncOptions {
   createSync?: typeof createOrderBookSync
 }
 
-// Module-level constants: getSnapshot must return a referentially stable value and a
-// changed subscribe identity forces a resubscribe, so both pre-mount fallbacks are fixed.
-// createIdleSnapshot is called once here (not per render) to keep that stable identity.
+// Module-level: getSnapshot and subscribe need referentially stable pre-mount fallbacks.
 const IDLE_SNAPSHOT: OrderBookSnapshot = createIdleSnapshot()
 
 const noopSubscribe = () => () => {}

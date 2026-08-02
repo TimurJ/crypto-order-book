@@ -1,12 +1,4 @@
-// Pure view-model for the rendered order book: one pass from the engine's snapshot to
-// everything the ladder needs. No React imports — this module is unit-tested directly.
-//
-// The float line: exchange-given values (price/qty strings) keep their exact string
-// identity all the way to the formatter (orderBookFormat.ts). DERIVED values —
-// cumulative totals, quote sums, bar percentages, mid, spread, imbalance — are our own
-// computed quantities, so Number() double math is honest here (display-only, precision
-// far beyond what's shown). Do not "fix" these into string arithmetic, and never
-// float-format the exchange's own strings.
+// Pure view-model: exchange strings stay strings; floats only for derived values (see ../CLAUDE.md).
 
 import { type BookLevel, selectTopLevels } from "@/lib/order-book/bookLevels.ts"
 import type {
@@ -21,38 +13,23 @@ export interface ViewLevel {
   cumulative: number
   /** Running Σ(price × qty) from best price down to this level — feeds the hover aggregates. */
   cumulativeQuote: number
-  /**
-   * Bar width, 0–100, scaled to the OWN side's max cumulative (the design's per-side
-   * fill — both sides reach 100% at their worst level). The cross-side imbalance signal
-   * the previous scaling carried lives in the imbalance bar now.
-   */
+  /** Bar width 0–100, scaled to the OWN side's max cumulative — per-side fill by design. */
   barPct: number
 }
 
 export interface OrderBookView {
   status: OrderBookStatus
-  /**
-   * Whether a first sync ever completed. Presentation forks on this, not on status:
-   * false → skeleton; true + non-live status → last-known book, dimmed. "destroyed"
-   * maps to false (render like pre-book idle) even though the Maps still hold data.
-   */
+  /** The presentation fork: false → skeleton; true + non-live → dimmed book. "destroyed" → false. */
   hasBook: boolean
   bids: ViewLevel[]
   asks: ViewLevel[]
-  /**
-   * Best-ask minus best-bid; null until both sides have a level, and also null if the
-   * local book is momentarily crossed or locked (a non-positive difference) — defensive,
-   * since a correctly-stitched book never crosses. The display renders null as "—".
-   */
+  /** Best-ask minus best-bid; null while a side is empty or the book is crossed/locked. */
   spread: number | null
   /** spread / bestAsk × 100 — null exactly when spread is null. */
   spreadPct: number | null
   /** (bestBid + bestAsk) / 2 — null exactly when spread is null (same crossed-book guard). */
   mid: number | null
-  /**
-   * Buy/sell share of the visible window's total volume, whole percents summing to 100.
-   * Null until at least one side has volume.
-   */
+  /** Buy/sell share of the window's volume, whole percents summing to 100; null while no volume. */
   imbalance: { bidPct: number; askPct: number } | null
   resyncCount: number
   droppedFrames: number
@@ -91,8 +68,7 @@ export function selectOrderBookView(
   const bestAsk = asks[0]
   const rawSpread =
     bestBid && bestAsk ? Number(bestAsk.price) - Number(bestBid.price) : null
-  // Guard a crossed/locked book (bid >= ask): never surface a non-positive spread, and
-  // never derive a mid from one — mid/spreadPct share the spread's null exactly.
+  // Crossed/locked guard: mid and spreadPct share the spread's null exactly.
   const spread = rawSpread !== null && rawSpread > 0 ? rawSpread : null
   const mid =
     spread !== null && bestBid && bestAsk

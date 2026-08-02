@@ -1,21 +1,5 @@
-// Presentational ladder — fully deterministic from props, no engine hooks, no config.
-// Still ONE real <table> (the redesign changed the look, not the semantics): the stacked
-// design-handoff layout is three <tbody> sections inside it — asks (worst price at the
-// top, best ask ending adjacent to the spread row), the one-row spread strip (a colSpan-3
-// cell), and bids (best first). Multiple tbodies are valid HTML and read as one table.
-// Rows stay slot-keyed by rank within their side; the asks' visual reversal is a CONSTANT
-// render-order flip, so keys never reorder — levels flow through the slots exactly as
-// before.
-//
-// The ladder owns the ONLY scroll region on the page (user decision: 20 levels/side may
-// exceed the viewport; the levels scroll, the page never does). The column header row is
-// sticky inside it — its hairline is an inset box-shadow, NOT a border, because Tailwind
-// preflight collapses table borders and a collapsed border does not travel with a sticky
-// cell. On first book acquisition (hasBook false→true) the container scrolls once so the
-// spread row sits centered — the market you care about is around the spread, and without
-// this you'd open onto the worst asks. Measured via getBoundingClientRect deltas (a tr's
-// offsetParent is the table, not the scroll container); never re-run on data commits, so
-// free scrolling is never hijacked.
+// Presentational ladder: one real <table>, three tbodies (asks reversed · spread strip · bids);
+// slots are the stable row identity. Geometry and scroll invariants: ../CLAUDE.md (Ladder & rows).
 
 import { useLayoutEffect, useRef } from "react"
 import {
@@ -37,6 +21,7 @@ import { DepthRow, SkeletonRow } from "./DepthRow.tsx"
 import { SpreadRow } from "./SpreadRow.tsx"
 import type { BookViewFilter } from "./ViewToggle.tsx"
 
+// Hairline as an inset box-shadow: a collapsed table border does not travel with a sticky cell.
 const HEAD_CELL =
   "sticky top-0 z-20 h-6 bg-card px-2.5 py-0 font-sans text-2xs font-normal text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]"
 
@@ -59,9 +44,7 @@ export function OrderBookLadder({
 }: OrderBookLadderProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const spreadRef = useRef<HTMLTableRowElement>(null)
-  // Center the spread row exactly once per book acquisition. hasBook is the dependency:
-  // the effect re-fires only on its false→true edge (skeleton → first sync, and again
-  // after destroyed→resync), never on streaming commits.
+  // Center the spread row exactly once per hasBook false→true edge, never on streaming commits.
   useLayoutEffect(() => {
     if (!view.hasBook) return
     const container = scrollRef.current
@@ -77,20 +60,13 @@ export function OrderBookLadder({
 
   const showAsks = viewFilter !== "bids"
   const showBids = viewFilter !== "asks"
-  // The row lists are SLOTS (rank 0..N-1), not the levels: slot k always shows its
-  // side's k-th best level, so slot number IS the stable row identity — levels flow
-  // through slots, rows never reorder. The asks render their slots in reverse (worst at
-  // the top, best ask ending adjacent to the spread row): a constant flip of the same
-  // slot list, so keys still never reorder between commits.
   const askSlots = Array.from(
     { length: view.asks.length },
     (_, i) => view.asks.length - 1 - i
   )
   const bidSlots = Array.from({ length: view.bids.length }, (_, i) => i)
   const skeletonSlots = Array.from({ length: levelCount }, (_, i) => i)
-  // One body renderer for both sides and both states: the tbody scaffold below stays a
-  // single copy, and only the row content switches on hasBook (skeleton rows share the
-  // live rows' geometry — see SkeletonRow in DepthRow.tsx).
+  // One body renderer for both sides and both states; only the row content switches on hasBook.
   const renderSide = (side: "ask" | "bid") => {
     if (!view.hasBook) {
       return skeletonSlots.map((slot) => <SkeletonRow key={slot} />)
@@ -131,9 +107,7 @@ export function OrderBookLadder({
       <TooltipProvider>
         <Table
           className="table-fixed font-mono text-xs tabular-nums"
-          // The vendored container's overflow-x-auto is an intermediate scroll container,
-          // which breaks position:sticky against OUR outer scroller — the sticky header
-          // needs an unbroken chain to it (nothing here can overflow horizontally anyway).
+          // The vendored overflow-x-auto would break the sticky header's chain to our scroller.
           containerClassName="overflow-x-visible"
           aria-busy={view.hasBook ? undefined : true}
         >

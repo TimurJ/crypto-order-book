@@ -39,7 +39,8 @@ How to work in this repo. These load every session — they are constraints, not
 
 ## Documentation layering
 
-- **README = how-to · CLAUDE.md = rationale + pointer · `docs/<name>.md` = full detail.** Push
+- **README = how-to · root CLAUDE.md = rationale + pointer · section CLAUDE.md = that directory's rules
+  + per-file rationale · `docs/<name>.md` = full detail.** Push
   architecture, decision tables, gotchas, and roadmaps into `docs/` and leave CLAUDE.md a short
   rationale plus a link — because CLAUDE.md loads every session, so length costs context and reduces
   adherence.

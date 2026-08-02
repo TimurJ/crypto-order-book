@@ -1,25 +1,5 @@
-// Container for the order-book widget: owns the engine (via useOrderBookSync), the
-// view-model derivation, and the panel chrome. Split in two so hooks stay
-// unconditional: OrderBook guards the runtime config (the no-DOM-bootstrap test
-// fallback has empty URLs — never construct an engine with garbage) and only then
-// renders ConnectedOrderBook, which runs the hooks.
-//
-// The panel is the design handoff's stacked layout on our kit: Card stays the shell
-// (bg/hairline/radius are already its job), zeroed of its default padding, composed of
-// hairline-separated strips — header (title + pair badge + live dot), view toggle,
-// degraded Alert, the scrollable ladder, imbalance bar, diagnostics. The Card is capped
-// at the viewport (max-h-full under App's h-dvh page) and the LADDER is the only thing
-// that scrolls — user decision: 20 levels/side, never the page.
-//
-// Staleness presentation: once a book exists, any non-live status keeps the last-known
-// book rendered, dimmed — the engine stops committing during a resync, so the dimmed
-// book is genuinely frozen, and gap-triggered resyncs usually resolve sub-second
-// (blanking to a skeleton would flicker).
-//
-// Announcements use two live-region tiers that never speak for the same event: a polite
-// role="status" region announces AVAILABILITY (first sync + recovery from degraded, via
-// useStatusAnnouncement — routine gap resyncs stay silent), and the assertive degraded
-// Alert (role="alert") announces the PROBLEM. The LiveIndicator dot is visual-only.
+// Container. Split so hooks stay unconditional: OrderBook guards the runtime config (never
+// construct an engine with empty URLs), then ConnectedOrderBook runs the hooks (../CLAUDE.md).
 
 import { type ReactNode, useId, useMemo, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx"
@@ -44,9 +24,7 @@ import { OrderBookLadder } from "./OrderBookLadder.tsx"
 import { type BookViewFilter, ViewToggle } from "./ViewToggle.tsx"
 
 const LEVEL_COUNT = 20
-// Snapshot depth for the engine: weight 50 vs 250 at the engine's 5000 default, and a
-// 1000-level seed leaves a 980-level margin over the 20 displayed — see the decision
-// log in docs/order-book-ui-architecture.md.
+// Weight 50, 980-level margin over the 20 shown — decision log in docs/order-book-ui-architecture.md.
 const DEPTH_LIMIT = 1_000
 
 const PANEL = "flex max-h-full w-full max-w-[360px] flex-col gap-0 py-0"

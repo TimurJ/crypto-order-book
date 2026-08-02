@@ -1,21 +1,5 @@
-// One depth level as a real table row (design handoff look, our table semantics). Three
-// cells — Price | Size | Total — with the two decorative layers living inside the LAST
-// cell: table-fixed makes every column exactly a third of the table, so an absolutely
-// positioned layer at width 300% of the Total cell spans exactly the whole row, growing
-// leftward from the right edge (the design anchors depth bars right on both sides). Cell
-// text sits in z-10 spans so the overflowing layers can never paint over it — the same
-// stacking technique the pre-redesign ladder proved at 200%.
-//
-// The depth bar's width is the level's per-side cumulative share; the flash overlay is
-// keyed by the slot-local useRowFlash key, so a bump remounts just the overlay and
-// restarts the CSS fade (no timers — see useLevelFlashes.ts). Both layers are
-// aria-hidden: the values they encode are already row text.
-//
-// Hovering the row opens the cumulative-aggregates popup (vendored shadcn Tooltip — the
-// row itself is the trigger via the render prop). It PORTALS out of the panel: the Card
-// is overflow-hidden and the ladder scrolls, so an in-flow popup would clip — the
-// prototype's `overflow: visible` hack is deliberately not ported. Rows are
-// deliberately non-interactive otherwise (row selection was dropped by user decision).
+// One depth level: decorative layers live in the LAST cell at width 300% under table-fixed
+// thirds, text in z-10 spans. Full geometry rationale: ../CLAUDE.md (Ladder & rows).
 
 import { Skeleton } from "@/components/ui/skeleton.tsx"
 import { TableCell, TableRow } from "@/components/ui/table.tsx"
@@ -32,9 +16,7 @@ import { type FlashDirection, useRowFlash } from "../model/useLevelFlashes.ts"
 
 const CELL = "h-[22px] px-2.5 py-0"
 
-// The skeleton row lives here, next to DepthRow, because it is its geometry twin: both
-// share CELL, so the pre-book ladder is exactly the height the live one will be — no
-// layout jump on first sync, and the spread-centering measurement stays valid.
+// DepthRow's geometry twin (shared CELL) — the spread-centering measurement depends on it.
 export function SkeletonRow() {
   return (
     <TableRow className="border-0">
@@ -56,10 +38,7 @@ interface DepthRowAggregatesProps {
   display: SymbolDisplay
 }
 
-// Popup body: cumulative aggregates from the best price down to this level. All four
-// values are derived floats (our math over the window), so toFixed/round formatting is
-// honest. The quote label comes from the symbol record — the handoff's hardcoded "USDC"
-// was a prototype mismatch with its own BTC-USDT pair.
+// All four values are derived floats, so toFixed/round formatting is honest here.
 function DepthRowAggregates({ level, mid, display }: DepthRowAggregatesProps) {
   const averagePrice = level.cumulativeQuote / level.cumulative
   const rows: Array<[string, string]> = [
@@ -153,6 +132,7 @@ export function DepthRow({
           <span className="relative z-10">{level.cumulative.toFixed(2)}</span>
         </TableCell>
       </TooltipTrigger>
+      {/* Portals out of the panel: the Card is overflow-hidden, an in-flow popup would clip. */}
       <TooltipContent
         side="right"
         sideOffset={-4}

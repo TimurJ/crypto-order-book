@@ -1,13 +1,4 @@
-// Direction memory for the spread row's mid price (design handoff: "▲ 68,418.00" in
-// green after an up-move, red ▼ after a down-move). The view-model is deliberately pure,
-// so the one piece of cross-commit memory the arrow needs — "which way did mid last
-// move?" — lives here instead.
-//
-// Latching: an unchanged mid keeps the LAST direction (the arrow doesn't blink off
-// between moves), and a null mid (empty/crossed book) both renders directionless and
-// wipes the memory — direction resumes fresh once a mid exists again. Render purity is
-// the same ref-committed-in-effect pattern as useLevelFlashes.ts, so StrictMode's
-// double render cannot double-apply a move.
+// Latches the mid's last move direction; a null mid wipes the memory. Render-pure (../CLAUDE.md).
 
 import { useEffect, useRef } from "react"
 
